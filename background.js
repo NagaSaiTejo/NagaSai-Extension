@@ -166,6 +166,10 @@ async function saveApiKeys(keys, sendResponse) {
 // ── Google OAuth Token ────────────────────────────────────────────
 function getGoogleToken(interactive = false) {
   return new Promise((resolve, reject) => {
+    if (!chrome.identity) {
+      reject(new Error('Google Identity API is not available in this browser. Please use the "Not google browser" option.'));
+      return;
+    }
     chrome.identity.getAuthToken({ interactive }, (token) => {
       if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
       else if (!token) reject(new Error('No token returned.'));

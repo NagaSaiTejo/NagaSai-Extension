@@ -117,15 +117,15 @@ window.NagaSaiShared = {
 
       <div id="nagasai-signin-screen">
         <div class="nagasai-signin-content">
-          <div class="nagasai-signin-logo"><span>S</span></div>
-          <h2>Welcome</h2>
-          <p>AI-powered reading assistant for every web page. Sign in once and start learning instantly.</p>
-          <div class="nagasai-free-badges">
-            <span class="nagasai-free-pill">✓ Gemini AI</span>
-            <span class="nagasai-free-pill">✓ 8+ Free Models</span>
-            <span class="nagasai-free-pill">✓ No API Key</span>
+          <div class="nagasai-signin-logo">
+            <img src="chrome-extension://${chrome.runtime.id}/icons/logo.png" alt="NagaSai AI Logo" />
           </div>
+          <h2>Welcome</h2>
+          <p>Want to work with NagaSai AI? Just sign in with Google and enjoy</p>
           <button id="nagasai-signin-btn" class="nagasai-google-btn">${this.googleBtnContent()}</button>
+          <div style="margin-top: 15px;">
+            <a href="#" id="nagasai-not-google-link" class="nagasai-alt-link">Not google browser tap me</a>
+          </div>
           <p id="nagasai-signin-error"></p>
         </div>
       </div>

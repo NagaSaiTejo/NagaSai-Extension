@@ -331,23 +331,39 @@
 }
 
 .nagasai-signin-logo {
-  width: 58px !important;
-  height: 58px !important;
-  margin: 0 auto 14px !important;
+  width: 64px !important;
+  height: 64px !important;
+  margin: 0 auto 16px !important;
   border-radius: 16px !important;
-  background: linear-gradient(135deg, #333, var(--ns-text-accent)) !important;
-  box-shadow: 0 6px 22px var(--ns-border-heavy) !important;
+  background: transparent !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
 }
 
 .nagasai-signin-logo span {
-  font-size: 30px !important;
-  font-weight: 800 !important;
-  font-style: italic !important;
-  font-family: Georgia, serif !important;
-  color: var(--ns-text-solid) !important;
+  display: none !important;
+}
+
+.nagasai-signin-logo img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  border-radius: 14px !important;
+}
+
+.nagasai-alt-link {
+  font-size: 11px !important;
+  color: var(--ns-text-accent) !important;
+  text-decoration: none !important;
+  opacity: 0.7 !important;
+  transition: opacity 0.2s, color 0.2s !important;
+}
+
+.nagasai-alt-link:hover {
+  opacity: 1 !important;
+  color: var(--ns-text-primary) !important;
+  text-decoration: underline !important;
 }
 
 .nagasai-signin-content h2 {
@@ -1039,4 +1055,19 @@
   --ns-grad-secondary: #e0e0e0 !important;
   --ns-grad-user-msg: #e6e6e6 !important;
   --ns-shadow-panel: 0 4px 20px #e6e6e6 !important;
+}
+
+/* ─── Locked Guest Mode ────────────────────────────────────────── */
+#nagasai-locked-message {
+  display: none !important;
+}
+
+#nagasai-chat-screen.nagasai-chat-screen--locked #nagasai-locked-message {
+  display: flex !important;
+}
+
+#nagasai-chat-screen.nagasai-chat-screen--locked .nagasai-model-bar,
+#nagasai-chat-screen.nagasai-chat-screen--locked #nagasai-messages,
+#nagasai-chat-screen.nagasai-chat-screen--locked .nagasai-input-row {
+  display: none !important;
 }

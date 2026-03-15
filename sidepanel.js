@@ -159,6 +159,10 @@
     panel.addEventListener('click', async (e) => {
       if (e.target.closest('#nagasai-signin-btn')) handleSignIn();
       if (e.target.closest('#nagasai-signout-btn')) handleSignOut();
+      if (e.target.closest('#nagasai-not-google-link')) {
+        e.preventDefault();
+        handleAlternativeBrowserMode();
+      }
       if (e.target.closest('#nagasai-send-btn')) sendUserMessage();
       if (e.target.closest('#nagasai-save-keys-btn')) saveApiKeys();
 
@@ -265,8 +269,27 @@
     await sendMessage({ type: T.SIGN_OUT });
     authState = { signedIn: false, user: null, token: null };
     chatHistory = [];
+    chrome.storage.local.set({ [K.CHAT_HISTORY]: [] }); // Fix: Clear storage on sign out
     currentView = 'chat';
     renderView();
+  }
+
+  function handleAlternativeBrowserMode() {
+    // Clear storage first to prevent history bleed
+    chrome.storage.local.set({ [K.CHAT_HISTORY]: [] });
+
+    // Fake a minimal auth state to bypass sign-in screen
+    authState = { signedIn: true, user: { name: 'Anonymous', given_name: 'Guest', picture: '' }, token: 'local-only' };
+
+    // Set a specialized welcome message
+    chatHistory = [{
+      role: 'assistant',
+      content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
+    }];
+
+    currentView = 'chat';
+    renderView();
+    saveChatHistory();
   }
 
   // ─── Settings / API Keys (Bug #3 Fix: save ALL fields including custom) ─
@@ -322,6 +345,7 @@
         msgEl.style.display = 'block';
         setTimeout(() => msgEl.style.display = 'none', 3000);
       }
+      renderView();
       renderProviderSelect();
       renderMessages();
     } else {
@@ -463,6 +487,15 @@ ${pageContent}
     }
   }
 
+  function hasAnyKey() {
+    return !!(
+      (apiKeys.google && apiKeys.google.trim()) ||
+      (apiKeys.groq && apiKeys.groq.trim()) ||
+      (apiKeys.openai && apiKeys.openai.trim()) ||
+      (apiKeys.customUrl && apiKeys.customUrl.trim())
+    );
+  }
+
   // ─── UI Helpers ───────────────────────────────────────────────
   function show(el) { if (el) el.classList.add('ns-show'); }
   function hide(el) { if (el) el.classList.remove('ns-show'); }
@@ -477,6 +510,10 @@ ${pageContent}
 
     hide(signInScreen); hide(chatScreen); hide(settingsScreen); hide(toolbar);
 
+    const isGuest = authState.token === 'local-only';
+    const noKeys = !hasAnyKey();
+    const isLocked = isGuest && noKeys;
+
     if (!authState.signedIn) {
       show(signInScreen);
     } else if (currentView === 'settings') {
@@ -486,8 +523,22 @@ ${pageContent}
     } else {
       show(toolbar);
       show(chatScreen);
-      renderProviderSelect();
-      renderMessages();
+      chatScreen.classList.toggle('nagasai-chat-screen--locked', isLocked);
+
+      if (isLocked) {
+        let lockedMsg = panel.querySelector('#nagasai-locked-message');
+        if (!lockedMsg) {
+          lockedMsg = document.createElement('div');
+          lockedMsg.id = 'nagasai-locked-message';
+          lockedMsg.innerHTML = `
+            <div style="font-size:40px; margin-bottom:20px; opacity:0.5;">🔒</div>
+            <p style="font-size:14px; line-height:1.6;">Add an api key in settings page to use nagasai extension</p>`;
+          chatScreen.appendChild(lockedMsg);
+        }
+      } else {
+        renderProviderSelect();
+        renderMessages();
+      }
     }
 
     if (authState.signedIn && authState.user) {
@@ -535,7 +586,9 @@ ${pageContent}
     const sel = panel.querySelector('#nagasai-provider-select');
     if (!sel) return;
 
+    const isGuest = authState.token === 'local-only';
     const activeProviders = Object.entries(PROVIDERS).filter(([pId, p]) => {
+      if (isGuest && pId === 'pollinations') return false; // Fix: Hide Free AI for guest mode
       if (!p.requiresKey) return true;
       if (pId === 'custom') return !!(apiKeys.customUrl && apiKeys.customUrl.trim());
       return !!(apiKeys[pId] && apiKeys[pId].trim() !== '');
