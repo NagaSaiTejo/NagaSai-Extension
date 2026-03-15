@@ -362,30 +362,63 @@
 
   toggleBtn.addEventListener('click', () => {
     if (toggleHasMoved) return;
-    // If in stealth mode, clicking the invisible S button exits stealth.
-    // The user knows where the S button is even when invisible.
-    if (isStealth) { exitStealth(); return; }
-    chrome.storage.local.get(K.PREFERRED_MODE, async (data) => {
-      if (data[K.PREFERRED_MODE] === 'sidepanel') {
-        await sendMsg({ type: T.OPEN_SIDEPANEL });
-      } else {
-        panelOpen = !panelOpen;
-        if (panelOpen) {
-          panel.classList.add('nagasai-panel--open');
-          applyToggleStyle(toggleBtn, true);
-          toggleBtn.style.opacity = '1';
-          // Bug #1 Fix: Save 'floating' only while panel is open, clear on close.
-          chrome.storage.local.set({ [K.PREFERRED_MODE]: 'floating' });
-          if (authState.signedIn) setTimeout(() => q('#nagasai-input')?.focus(), 100);
+
+    // Safety: Check if extension context is valid
+    // If chrome.runtime.id is missing or calling it throws, the extension
+    const isContextValid = () => {
+      try { return !!chrome.runtime.id; }
+      catch (e) { return false; }
+    };
+
+    if (!isContextValid()) {
+      showContextError();
+      return;
+    }
+
+    try {
+      // If in stealth mode, clicking the invisible S button exits stealth.
+      if (isStealth) { exitStealth(); return; }
+
+      chrome.storage.local.get(K.PREFERRED_MODE, async (data) => {
+        if (chrome.runtime.lastError) { showContextError(); return; }
+
+        if (data[K.PREFERRED_MODE] === 'sidepanel') {
+          const resp = await sendMsg({ type: T.OPEN_SIDEPANEL });
+          if (!resp.success && resp.error?.includes('disconnected')) showContextError();
         } else {
-          panel.classList.remove('nagasai-panel--open');
-          applyToggleStyle(toggleBtn, false);
-          // Bug #1 Fix: Clear preference on close so next page load never auto-opens.
-          chrome.storage.local.remove(K.PREFERRED_MODE);
+          panelOpen = !panelOpen;
+          if (panelOpen) {
+            panel.classList.add('nagasai-panel--open');
+            applyToggleStyle(toggleBtn, true);
+            toggleBtn.style.opacity = '1';
+            chrome.storage.local.set({ [K.PREFERRED_MODE]: 'floating' });
+            if (authState.signedIn) setTimeout(() => q('#nagasai-input')?.focus(), 100);
+          } else {
+            panel.classList.remove('nagasai-panel--open');
+            applyToggleStyle(toggleBtn, false);
+            chrome.storage.local.remove(K.PREFERRED_MODE);
+          }
         }
-      }
-    });
+      });
+    } catch (e) {
+      showContextError();
+    }
   });
+
+  // Helper to notify user when extension context is lost (e.g. after update)
+  function showContextError() {
+    toggleBtn.style.setProperty('background', '#ff4d4d', 'important');
+    toggleBtn.style.setProperty('transform', 'scale(1.2)', 'important');
+    toggleBtn.title = 'Extension Updated — Please reload this page to continue using NagaSai AI';
+    const s = toggleBtn.querySelector('#__pr_s_letter__');
+    if (s) {
+      s.textContent = '!';
+      s.style.color = 'white';
+      s.style.opacity = '1';
+    }
+    // Attempt a standard alert as a last resort for visibility
+    alert('NagaSai AI has been updated or reloaded. Please refresh this page to continue using the extension.');
+  }
 
   // ── Auth ───────────────────────────────────────────────────────
   async function refreshAuthState() {
@@ -511,6 +544,8 @@
     });
 
     panel.addEventListener('keydown', (e) => {
+      // Bug Fix: Block keyboard events from bubbling to host page (GitHub shortcuts)
+      e.stopPropagation();
       if (e.target && e.target.id === 'nagasai-input') {
         if ((e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey) {
           e.preventDefault();
@@ -518,6 +553,10 @@
         }
       }
     });
+
+    // Also block keyup/keypress to be absolutely sure no host listeners fire
+    panel.addEventListener('keyup', (e) => e.stopPropagation());
+    panel.addEventListener('keypress', (e) => e.stopPropagation());
 
     setupMicButton();
 
