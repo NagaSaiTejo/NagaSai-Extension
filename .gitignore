@@ -1,0 +1,51 @@
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE Files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node modules (just in case you add build steps later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Extension builds (if you zip it up later)
+*.zip
+*.crx
+
+# Chrome extension signing/private files
+*.pem
+*.key
+*.p12
+*.crt
+
+# Local environment and secret files
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+
+# Local build/output artifacts
+dist/
+build/
+artifacts/
+web-ext-artifacts/
+
+# Runtime logs
+*.log
