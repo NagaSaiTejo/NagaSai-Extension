@@ -1,0 +1,1042 @@
+/* ============================================================
+   Naga Sai Extension — Floating Panel Styles v3
+   KEY FIX: Inner screens use .ns-show class (not inline style)
+            so !important CSS rules can control display properly
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+
+/* ─── Stealth Light & Dark Variables ───────────────────────────────────── */
+#nagasai-root {
+  /* DARK THEME (Default) */
+  --ns-text-solid: #ffffff;
+  --ns-text-primary: #e0e0e0;
+  --ns-text-secondary: rgba(200, 200, 200, 0.6);
+  --ns-text-placeholder: rgba(180, 180, 180, 0.4);
+  --ns-text-accent: #aaaaaa;
+
+  --ns-bg-panel: #161616;
+  --ns-bg-header: #1e1e1e;
+  --ns-bg-toolbar: #282828;
+  --ns-bg-model-bar: #191919;
+  --ns-bg-input-row: #141414;
+  --ns-bg-input: #2d2d2d;
+  --ns-bg-input-focus: #373737;
+  --ns-bg-select: #323232;
+  --ns-bg-msg-assistant: #333333;
+  --ns-bg-item: #2a2a2a;
+  --ns-bg-item-hover: #333333;
+  --ns-bg-code: #121212;
+
+  --ns-border-light: rgba(120, 120, 120, 0.1);
+  --ns-border-medium: rgba(120, 120, 120, 0.2);
+  --ns-border-heavy: rgba(120, 120, 120, 0.3);
+  --ns-border-focus: rgba(120, 120, 120, 0.5);
+  --ns-border-code: #333333;
+
+  --ns-grad-primary: #333333;
+  --ns-grad-secondary: #222222;
+  --ns-grad-user-msg: #3c3c3c;
+
+  --ns-shadow-panel: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: light) {
+  #nagasai-root {
+    /* LIGHT THEME (Stealth / Black & White) */
+    --ns-text-solid: #000000;
+    --ns-text-primary: #222222;
+    --ns-text-secondary: rgba(0, 0, 0, 0.65);
+    --ns-text-placeholder: rgba(0, 0, 0, 0.45);
+    --ns-text-accent: #444444;
+
+    --ns-bg-panel: #ffffff;
+    --ns-bg-header: #f0f0f0;
+    --ns-bg-toolbar: #e6e6e6;
+    --ns-bg-model-bar: #f5f5f5;
+    --ns-bg-input-row: #fafafa;
+    --ns-bg-input: #f0f0f0;
+    --ns-bg-input-focus: #e6e6e6;
+    --ns-bg-select: #ebebeb;
+    --ns-bg-msg-assistant: #f7f7f7;
+    --ns-bg-item: #f2f2f2;
+    --ns-bg-item-hover: #e6e6e6;
+    --ns-bg-code: #f4f4f4;
+
+    --ns-border-light: rgba(0, 0, 0, 0.06);
+    --ns-border-medium: rgba(0, 0, 0, 0.12);
+    --ns-border-heavy: rgba(0, 0, 0, 0.2);
+    --ns-border-focus: rgba(0, 0, 0, 0.35);
+    --ns-border-code: #dddddd;
+
+    --ns-grad-primary: #f0f0f0;
+    --ns-grad-secondary: #e0e0e0;
+    --ns-grad-user-msg: #e6e6e6;
+
+    /* Very subtle shadow for light mode blending */
+    --ns-shadow-panel: 0 4px 20px #e6e6e6;
+  }
+}
+
+/* ─── Toggle Button ─────────────────────────────────────────── */
+#nagasai-toggle {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: var(--ns-grad-primary) !important;
+  box-shadow: 0 4px 12px var(--ns-text-secondary), 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+  z-index: 2147483646 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+  opacity: 0.4 !important;
+}
+
+#nagasai-toggle:hover {
+  transform: scale(1.1) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  opacity: 1 !important;
+}
+
+#nagasai-toggle.nagasai-toggle--active {
+  background: var(--ns-grad-secondary) !important;
+}
+
+.nagasai-toggle-inner {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.nagasai-toggle-s {
+  font-family: Georgia, 'Times New Roman', serif !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  font-style: italic !important;
+  color: var(--ns-text-solid) !important;
+  line-height: 1 !important;
+}
+
+/* ─── Root container ────────────────────────────────────────── */
+#nagasai-root {
+  position: static !important;
+  z-index: 2147483647 !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-size: 13px !important;
+  color: var(--ns-text-primary) !important;
+  -webkit-font-smoothing: antialiased !important;
+  line-height: 1.5 !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
+}
+
+#nagasai-root * {
+  box-sizing: border-box !important;
+}
+
+/* ─── Panel ─────────────────────────────────────────────────── */
+#nagasai-panel {
+  position: fixed !important;
+  bottom: 65px !important;
+  right: 20px !important;
+  pointer-events: all !important;
+  width: 320px !important;
+  height: 340px !important;
+  background: var(--ns-bg-panel) !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--ns-border-heavy) !important;
+  box-shadow: var(--ns-shadow-panel) !important;
+  display: none !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  /* Removed transition and transform for instant open */
+}
+
+#nagasai-panel.nagasai-panel--open {
+  display: flex !important;
+}
+
+/* ─── Header ────────────────────────────────────────────────── */
+#nagasai-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 14px !important;
+  background: var(--ns-bg-header) !important;
+  border-bottom: 1px solid var(--ns-border-medium) !important;
+  cursor: grab !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
+}
+
+#nagasai-header:active {
+  cursor: grabbing !important;
+}
+
+.nagasai-header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.nagasai-logo-pulse {
+  display: none !important;
+}
+
+.nagasai-title {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--ns-text-primary) !important;
+}
+
+.nagasai-ai-badge {
+  display: none !important;
+}
+
+.nagasai-header-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+}
+
+.nagasai-icon-btn {
+  width: 26px !important;
+  height: 26px !important;
+  border: none !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: var(--ns-text-secondary) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: background 0.15s, color 0.15s !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.nagasai-icon-btn:hover {
+  background: var(--ns-border-medium) !important;
+  color: var(--ns-text-accent) !important;
+}
+
+/* ─── Toolbar ────────────────────────────────────────────────── */
+#nagasai-toolbar {
+  display: none !important;
+  /* hidden by default */
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 6px 13px !important;
+  background: var(--ns-bg-toolbar) !important;
+  border-bottom: 1px solid var(--ns-border-light) !important;
+  flex-shrink: 0 !important;
+}
+
+#nagasai-toolbar.ns-show {
+  display: none !important;
+  /* hidden to save space as per user request */
+}
+
+.nagasai-user-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+
+#nagasai-avatar {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 1.5px solid var(--ns-border-heavy) !important;
+  display: none !important;
+}
+
+#nagasai-avatar.ns-show {
+  display: block !important;
+}
+
+#nagasai-username {
+  font-size: 11.5px !important;
+  font-weight: 500 !important;
+  color: var(--ns-text-secondary) !important;
+}
+
+.nagasai-signout-btn {
+  font-size: 11px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  background: rgba(255, 90, 90, 0.1) !important;
+  border: 1px solid rgba(255, 90, 90, 0.25) !important;
+  color: #ff9e9e !important;
+  cursor: pointer !important;
+  transition: background 0.15s !important;
+  font-family: inherit !important;
+}
+
+.nagasai-signout-btn:hover {
+  background: rgba(255, 90, 90, 0.2) !important;
+}
+
+/* ─── Screens: hidden by default, shown by .ns-show ─────────── */
+#nagasai-signin-screen {
+  display: none !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+}
+
+#nagasai-signin-screen.ns-show {
+  display: flex !important;
+}
+
+#nagasai-chat-screen {
+  display: none !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+
+#nagasai-chat-screen.ns-show {
+  display: flex !important;
+}
+
+#nagasai-settings-screen {
+  display: none !important;
+  flex-direction: column !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+}
+
+#nagasai-settings-screen.ns-show {
+  display: flex !important;
+}
+
+/* ─── Sign-In Content ────────────────────────────────────────── */
+.nagasai-signin-content {
+  text-align: center !important;
+  width: 100% !important;
+  padding: 20px 18px !important;
+}
+
+.nagasai-signin-logo {
+  width: 58px !important;
+  height: 58px !important;
+  margin: 0 auto 14px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, #333, var(--ns-text-accent)) !important;
+  box-shadow: 0 6px 22px var(--ns-border-heavy) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.nagasai-signin-logo span {
+  font-size: 30px !important;
+  font-weight: 800 !important;
+  font-style: italic !important;
+  font-family: Georgia, serif !important;
+  color: var(--ns-text-solid) !important;
+}
+
+.nagasai-signin-content h2 {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: var(--ns-text-primary) !important;
+  margin: 0 0 7px !important;
+}
+
+.nagasai-signin-content p {
+  font-size: 11.5px !important;
+  color: var(--ns-text-secondary) !important;
+  margin: 0 0 14px !important;
+  line-height: 1.6 !important;
+}
+
+#nagasai-signin-error {
+  color: #ff8888 !important;
+  font-size: 11px !important;
+  margin-top: 8px !important;
+  min-height: 14px !important;
+  display: block !important;
+}
+
+.nagasai-free-badges {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  justify-content: center !important;
+  margin-bottom: 14px !important;
+}
+
+.nagasai-free-pill {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  padding: 3px 8px !important;
+  border-radius: 20px !important;
+  background: var(--ns-bg-pill) !important;
+  border: 1px solid var(--ns-border-heavy) !important;
+  color: var(--ns-text-accent) !important;
+}
+
+.nagasai-google-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 9px !important;
+  width: 100% !important;
+  padding: 10px !important;
+  border-radius: 11px !important;
+  background: var(--ns-bg-msg-assistant) !important;
+  border: 1px solid var(--ns-border-light) !important;
+  color: var(--ns-text-primary) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s !important;
+  font-family: inherit !important;
+}
+
+.nagasai-google-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: var(--ns-border-heavy) !important;
+  transform: translateY(-1px) !important;
+}
+
+.nagasai-google-btn:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* ─── Model Bar ──────────────────────────────────────────────── */
+.nagasai-model-bar {
+  display: flex !important;
+  gap: 4px !important;
+  padding: 4px 8px !important;
+  background: var(--ns-bg-model-bar) !important;
+  border-bottom: 1px solid var(--ns-border-light) !important;
+  flex-shrink: 0 !important;
+}
+
+.nagasai-select-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  flex: 1 !important;
+}
+
+.nagasai-select-wrap label {
+  font-size: 8px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  color: var(--ns-text-placeholder) !important;
+  letter-spacing: 0.5px !important;
+}
+
+.nagasai-select {
+  width: 100% !important;
+  padding: 3px 18px 3px 6px !important;
+  font-size: 10px !important;
+  font-family: inherit !important;
+  background: var(--ns-bg-select) !important;
+  border: 1px solid var(--ns-border-medium) !important;
+  border-radius: 5px !important;
+  color: var(--ns-text-primary) !important;
+  appearance: none !important;
+  cursor: pointer !important;
+  outline: none !important;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(120,120,120,0.8)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 4px center !important;
+  background-size: 10px !important;
+  transition: border-color 0.2s, background 0.2s !important;
+}
+
+.nagasai-select:focus {
+  border-color: var(--ns-border-focus) !important;
+}
+
+/* ─── Messages ───────────────────────────────────────────────── */
+#nagasai-messages {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  min-height: 0 !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--ns-border-heavy) transparent !important;
+}
+
+#nagasai-messages::-webkit-scrollbar {
+  width: 3px !important;
+}
+
+#nagasai-messages::-webkit-scrollbar-thumb {
+  background: var(--ns-border-heavy) !important;
+  border-radius: 3px !important;
+}
+
+.nagasai-empty-state {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  text-align: center !important;
+  padding: 16px 8px !important;
+  gap: 8px !important;
+}
+
+.nagasai-empty-icon {
+  font-size: 28px !important;
+}
+
+.nagasai-empty-state p {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: var(--ns-text-secondary) !important;
+  margin: 0 !important;
+}
+
+.nagasai-page-title {
+  font-size: 10.5px !important;
+  color: var(--ns-text-secondary) !important;
+  font-style: italic !important;
+}
+
+.nagasai-suggestions {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  width: 100% !important;
+  margin-top: 4px !important;
+}
+
+.nagasai-suggestion {
+  padding: 6px 11px !important;
+  border-radius: 9px !important;
+  background: var(--ns-bg-item) !important;
+  border: 1px solid var(--ns-border-medium) !important;
+  color: var(--ns-text-secondary) !important;
+  font-size: 11.5px !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: background 0.15s !important;
+}
+
+.nagasai-suggestion:hover {
+  background: var(--ns-bg-item-hover) !important;
+}
+
+.nagasai-msg {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  animation: nagasai-slide-in 0.18s ease !important;
+}
+
+.nagasai-msg--user {
+  align-items: flex-end !important;
+}
+
+.nagasai-msg--assistant {
+  align-items: flex-start !important;
+}
+
+.nagasai-msg-label {
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  color: var(--ns-border-focus) !important;
+  padding: 0 3px !important;
+}
+
+.nagasai-msg-bubble {
+  max-width: 100% !important;
+  width: fit-content !important;
+  padding: 8px 11px !important;
+  border-radius: 13px !important;
+  font-size: 12.5px !important;
+  line-height: 1.52 !important;
+  word-wrap: break-word !important;
+  white-space: pre-wrap !important;
+}
+
+.nagasai-msg--user .nagasai-msg-bubble {
+  background: var(--ns-grad-user-msg) !important;
+  color: var(--ns-text-primary) !important;
+  border-bottom-right-radius: 3px !important;
+}
+
+.nagasai-msg--assistant .nagasai-msg-bubble {
+  background: var(--ns-bg-msg-assistant) !important;
+  border: 1px solid var(--ns-border-medium) !important;
+  color: var(--ns-text-primary) !important;
+  border-bottom-left-radius: 3px !important;
+  width: 100% !important;
+  /* Stretches assistant message block to use all horizontal space */
+}
+
+.nagasai-msg-bubble code {
+  background: rgba(0, 0, 0, 0.4) !important;
+  padding: 1px 4px !important;
+  border-radius: 3px !important;
+  font-size: 11.5px !important;
+  font-family: monospace !important;
+  color: var(--ns-text-secondary) !important;
+}
+
+.nagasai-typing {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 10px 14px !important;
+}
+
+.nagasai-typing span {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: var(--ns-text-accent) !important;
+  animation: nagasai-bounce 1.3s ease infinite !important;
+}
+
+.nagasai-typing span:nth-child(2) {
+  animation-delay: 0.18s !important;
+}
+
+.nagasai-typing span:nth-child(3) {
+  animation-delay: 0.36s !important;
+}
+
+/* ─── Input Row ──────────────────────────────────────────────── */
+.nagasai-input-row {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 7px !important;
+  padding: 8px 10px 11px !important;
+  border-top: 1px solid var(--ns-border-light) !important;
+  background: var(--ns-bg-input-row) !important;
+  flex-shrink: 0 !important;
+}
+
+.nagasai-screenshot-preview-wrap {
+  display: none !important;
+  position: relative !important;
+  width: fit-content !important;
+}
+
+.nagasai-screenshot-preview-wrap.ns-show {
+  display: block !important;
+}
+
+.nagasai-screenshot-preview {
+  height: 50px !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--ns-border-medium) !important;
+  object-fit: cover !important;
+}
+
+.nagasai-remove-screenshot-btn {
+  position: absolute !important;
+  top: -6px !important;
+  right: -6px !important;
+  background: #ff5555 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 16px !important;
+  height: 16px !important;
+  font-size: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.nagasai-input-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+
+.nagasai-screenshot-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--ns-text-secondary) !important;
+  cursor: pointer !important;
+  padding: 6px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: color 0.15s, background 0.15s !important;
+}
+
+.nagasai-screenshot-btn:hover {
+  background: var(--ns-border-light) !important;
+  color: var(--ns-text-primary) !important;
+}
+
+/* ─── Mic Button ─────────────────────────────────────────────── */
+.nagasai-mic-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--ns-text-secondary) !important;
+  cursor: pointer !important;
+  padding: 6px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: color 0.15s, background 0.15s !important;
+  flex-shrink: 0 !important;
+}
+
+.nagasai-mic-btn:hover {
+  background: var(--ns-border-light) !important;
+  color: var(--ns-text-primary) !important;
+}
+
+/* Red pulsing state when recording is active */
+.nagasai-mic-btn.nagasai-mic-recording {
+  color: #ff4444 !important;
+  animation: nagasai-mic-pulse 1s ease-in-out infinite !important;
+}
+
+@keyframes nagasai-mic-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+.nagasai-input {
+  flex: 1 !important;
+  padding: 8px 10px !important;
+  border-radius: 11px !important;
+  background: var(--ns-bg-input) !important;
+  border: 1px solid var(--ns-border-heavy) !important;
+  color: var(--ns-text-primary) !important;
+  font-size: 12.5px !important;
+  font-family: inherit !important;
+  resize: none !important;
+  outline: none !important;
+  max-height: 80px !important;
+  min-height: 34px !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  transition: border-color 0.2s !important;
+  line-height: 1.45 !important;
+}
+
+.nagasai-input::-webkit-scrollbar {
+  display: none !important;
+}
+
+.nagasai-input::placeholder {
+  color: var(--ns-text-placeholder) !important;
+}
+
+.nagasai-input:focus {
+  border-color: var(--ns-border-focus) !important;
+  background: var(--ns-bg-input-focus) !important;
+}
+
+.nagasai-send-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border-radius: 11px !important;
+  background: var(--ns-grad-primary) !important;
+  border: none !important;
+  color: var(--ns-text-solid) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: transform 0.15s, box-shadow 0.15s !important;
+  box-shadow: 0 2px 6px #e6e6e6 !important;
+  flex-shrink: 0 !important;
+}
+
+.nagasai-send-btn:hover {
+  transform: scale(1.07) !important;
+}
+
+.nagasai-send-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+/* ─── Settings ───────────────────────────────────────────────── */
+.nagasai-settings-wrap {
+  padding: 13px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+}
+
+.nagasai-settings-section {
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
+  color: var(--ns-border-focus) !important;
+  margin: 4px 0 0 !important;
+}
+
+.nagasai-settings-user {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 9px 11px !important;
+  border-radius: 11px !important;
+  background: var(--ns-bg-item) !important;
+  border: 1px solid var(--ns-border-medium) !important;
+}
+
+.nagasai-settings-avatar {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 2px solid var(--ns-border-heavy) !important;
+}
+
+.nagasai-settings-name {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: var(--ns-text-primary) !important;
+}
+
+.nagasai-settings-email {
+  font-size: 10.5px !important;
+  color: var(--ns-text-secondary) !important;
+}
+
+.nagasai-signout-full {
+  width: 100% !important;
+  padding: 8px !important;
+  text-align: center !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+}
+
+.nagasai-about-card {
+  background: var(--ns-bg-about) !important;
+  border: 1px solid var(--ns-border-light) !important;
+  border-radius: 11px !important;
+  padding: 11px 13px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 7px !important;
+}
+
+.nagasai-about-card p {
+  font-size: 11.5px !important;
+  color: var(--ns-text-secondary) !important;
+  margin: 0 !important;
+  line-height: 1.5 !important;
+}
+
+.nagasai-about-card strong {
+  color: var(--ns-text-primary) !important;
+}
+
+/* ─── Animations ──────────────────────────────────────────────── */
+@keyframes nagasai-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(120, 120, 120, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(120, 120, 120, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(120, 120, 120, 0);
+  }
+}
+
+@keyframes nagasai-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nagasai-bounce {
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+/* ─── Code Blocks ────────────────────────────────────────────── */
+.nagasai-code-wrapper {
+  position: relative !important;
+  background: var(--ns-bg-code) !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--ns-border-code) !important;
+  margin: 6px 0 !important;
+  overflow: hidden !important;
+}
+
+.nagasai-code-header {
+  position: absolute !important;
+  top: 4px !important;
+  right: 4px !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-bottom: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.2s ease !important;
+  z-index: 10 !important;
+}
+
+.nagasai-code-wrapper:hover .nagasai-code-header {
+  opacity: 1 !important;
+}
+
+.nagasai-copy-btn {
+  background: rgba(40, 40, 40, 0.7) !important;
+  border: 1px solid var(--ns-border-focus) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 4px !important;
+  padding: 4px !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.nagasai-copy-btn:hover {
+  background: rgba(60, 60, 60, 0.9) !important;
+  color: #fff !important;
+}
+
+.nagasai-copy-btn.copied {
+  background: rgba(40, 167, 69, 0.8) !important;
+  color: #fff !important;
+  border-color: #28a745 !important;
+}
+
+.nagasai-code {
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+  background: transparent !important;
+  color: var(--ns-text-code) !important;
+  padding: 8px 10px !important;
+  margin: 0 !important;
+  border: none !important;
+  font-family: Consolas, Monaco, 'Courier New', monospace !important;
+  font-size: 11px !important;
+  overflow-x: auto !important;
+}
+
+.nagasai-code code {
+  background: none !important;
+  padding: 0 !important;
+  color: inherit !important;
+}
+
+/* ─── Manual overrides for Light/Dark (Bug #2 Fix: !important ensures these
+   beat the @media prefers-color-scheme block when user manually toggles) ── */
+#nagasai-root.ns-dark-theme {
+  --ns-text-solid: #ffffff !important;
+  --ns-text-primary: #e0e0e0 !important;
+  --ns-text-secondary: rgba(200, 200, 200, 0.6) !important;
+  --ns-text-placeholder: rgba(180, 180, 180, 0.4) !important;
+  --ns-text-accent: #aaaaaa !important;
+  --ns-bg-panel: #161616 !important;
+  --ns-bg-header: #1e1e1e !important;
+  --ns-bg-toolbar: #282828 !important;
+  --ns-bg-model-bar: #191919 !important;
+  --ns-bg-input-row: #141414 !important;
+  --ns-bg-input: #2d2d2d !important;
+  --ns-bg-input-focus: #373737 !important;
+  --ns-bg-select: #323232 !important;
+  --ns-bg-msg-assistant: #333333 !important;
+  --ns-bg-item: #2a2a2a !important;
+  --ns-bg-item-hover: #333333 !important;
+  --ns-bg-code: #121212 !important;
+  --ns-border-light: rgba(120, 120, 120, 0.1) !important;
+  --ns-border-medium: rgba(120, 120, 120, 0.2) !important;
+  --ns-border-heavy: rgba(120, 120, 120, 0.3) !important;
+  --ns-border-focus: rgba(120, 120, 120, 0.5) !important;
+  --ns-border-code: #333333 !important;
+  --ns-grad-primary: #333333 !important;
+  --ns-grad-secondary: #222222 !important;
+  --ns-grad-user-msg: #3c3c3c !important;
+  --ns-shadow-panel: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+#nagasai-root.ns-light-theme {
+  --ns-text-solid: #000000 !important;
+  --ns-text-primary: #222222 !important;
+  --ns-text-secondary: rgba(0, 0, 0, 0.65) !important;
+  --ns-text-placeholder: rgba(0, 0, 0, 0.45) !important;
+  --ns-text-accent: #444444 !important;
+  --ns-bg-panel: #ffffff !important;
+  --ns-bg-header: #f0f0f0 !important;
+  --ns-bg-toolbar: #e6e6e6 !important;
+  --ns-bg-model-bar: #f5f5f5 !important;
+  --ns-bg-input-row: #fafafa !important;
+  --ns-bg-input: #f0f0f0 !important;
+  --ns-bg-input-focus: #e6e6e6 !important;
+  --ns-bg-select: #ebebeb !important;
+  --ns-bg-msg-assistant: #f7f7f7 !important;
+  --ns-bg-item: #f2f2f2 !important;
+  --ns-bg-item-hover: #e6e6e6 !important;
+  --ns-bg-code: #f4f4f4 !important;
+  --ns-border-light: rgba(0, 0, 0, 0.06) !important;
+  --ns-border-medium: rgba(0, 0, 0, 0.12) !important;
+  --ns-border-heavy: rgba(0, 0, 0, 0.2) !important;
+  --ns-border-focus: rgba(0, 0, 0, 0.35) !important;
+  --ns-border-code: #dddddd !important;
+  --ns-grad-primary: #f0f0f0 !important;
+  --ns-grad-secondary: #e0e0e0 !important;
+  --ns-grad-user-msg: #e6e6e6 !important;
+  --ns-shadow-panel: 0 4px 20px #e6e6e6 !important;
+}
