@@ -67,3 +67,6 @@ A lean MV3 service worker that handles:
 
 *Developed with precision for a seamless AI-native browsing experience with NagaSai.*
  Extension v1.0*
+
+
+Minor update for CodeRabbit review test by NagaSai
