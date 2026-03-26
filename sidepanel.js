@@ -14,7 +14,7 @@
     PULL_PAGE_CONTENT: '_ra',
     OPEN_FLOATING: '_rc',
   };
-  const K = { CHAT_HISTORY: '_c1', PREFERRED_MODE: '_c2' };
+  const K = { CHAT_HISTORY: '_c1', PREFERRED_MODE: '_c2', IS_GUEST: '_c3' };
   const PORT_NAME = '_p0rt_sp';
 
   // Bug #5 Fix: Sliding window — only send last N messages to LLM
@@ -66,8 +66,11 @@
     }
   });
 
-  chrome.storage.local.get(K.CHAT_HISTORY, (data) => {
+  chrome.storage.local.get([K.CHAT_HISTORY, K.IS_GUEST], (data) => {
     if (data[K.CHAT_HISTORY]) chatHistory = data[K.CHAT_HISTORY];
+    if (data[K.IS_GUEST]) {
+      handleAlternativeBrowserMode(true); // silent restore
+    }
   });
 
   // Listen for storage changes (chat history sync across tabs/panels)
@@ -257,6 +260,7 @@
     ]);
 
     if (res && res.success) {
+      chrome.storage.local.remove(K.IS_GUEST);
       authState = { signedIn: true, user: res.user, token: res.token };
       renderView();
     } else {
@@ -267,6 +271,7 @@
 
   async function handleSignOut() {
     await sendMessage({ type: T.SIGN_OUT });
+    chrome.storage.local.remove(K.IS_GUEST);
     authState = { signedIn: false, user: null, token: null };
     chatHistory = [];
     chrome.storage.local.set({ [K.CHAT_HISTORY]: [] }); // Fix: Clear storage on sign out
@@ -274,22 +279,24 @@
     renderView();
   }
 
-  function handleAlternativeBrowserMode() {
-    // Clear storage first to prevent history bleed
-    chrome.storage.local.set({ [K.CHAT_HISTORY]: [] });
+  function handleAlternativeBrowserMode(silent = false) {
+    if (!silent) {
+      // Clear storage first to prevent history bleed
+      chrome.storage.local.set({ [K.CHAT_HISTORY]: [], [K.IS_GUEST]: true });
+
+      // Set a specialized welcome message
+      chatHistory = [{
+        role: 'assistant',
+        content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
+      }];
+    }
 
     // Fake a minimal auth state to bypass sign-in screen
     authState = { signedIn: true, user: { name: 'Anonymous', given_name: 'Guest', picture: '' }, token: 'local-only' };
 
-    // Set a specialized welcome message
-    chatHistory = [{
-      role: 'assistant',
-      content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
-    }];
-
     currentView = 'chat';
     renderView();
-    saveChatHistory();
+    if (!silent) saveChatHistory();
   }
 
   // ─── Settings / API Keys (Bug #3 Fix: save ALL fields including custom) ─
@@ -418,6 +425,8 @@ If the page contains a code editor (like LeetCode, GitHub, etc.) and the user as
 - Always provide the full solution including the original given signatures to ensure the code remains a valid, runnable unit.
 
 Always detect the user's intent FIRST before responding.
+
+IMPORTANT: NEVER include any signatures, footer messages, or 'Powered by' statements in your response. Provide only the answer itself.
 
 Current Page: "${pageTitle}"
 URL: ${pageUrl}

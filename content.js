@@ -23,6 +23,7 @@
   const K = {
     CHAT_HISTORY: '_c1',
     PREFERRED_MODE: '_c2',
+    IS_GUEST: '_c3',
   };
 
   // ── Port name (must match background.js) ───────────────────────
@@ -60,10 +61,18 @@
   function revealUI() {
     if (uiRevealed) return;
     uiRevealed = true;
-    shadowHost.style.setProperty('opacity', '1', 'important');
-    if (!isStealth) {
-      toggleBtn.style.setProperty('opacity', panelOpen ? '1' : '0.4', 'important');
-      toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
+    
+    // Only show if stylesheet is actually loaded
+    if (shadowRoot.adoptedStyleSheets.length > 0) {
+      shadowHost.style.setProperty('display', 'block', 'important');
+      shadowHost.style.setProperty('opacity', '1', 'important');
+      if (!isStealth) {
+        toggleBtn.style.setProperty('opacity', panelOpen ? '1' : '0.4', 'important');
+        toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
+      }
+    } else {
+      // Styles failed (likely context invalidated) - keep hidden or show error
+      showContextError();
     }
   }
   // Fallback reveal
@@ -86,6 +95,7 @@
     'height:100%',
     'z-index:2147483647',
     'pointer-events:none',
+    'display:none',
     'opacity:0',
     'transition:opacity 0.4s ease',
   ].join('!important;') + '!important;';
@@ -244,8 +254,11 @@
   // Bug #1 Fix: Do NOT auto-open the panel on page load.
   // PREFERRED_MODE is only used to remember WHICH mode to use when the
   // user clicks the 'S' button — NOT to auto-open it on navigation.
-  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE], (data) => {
+  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE, K.IS_GUEST], (data) => {
     if (data[K.CHAT_HISTORY]) chatHistory = data[K.CHAT_HISTORY];
+    if (data[K.IS_GUEST]) {
+      handleAlternativeBrowserMode(true); // silent restore
+    }
     // Panel always starts closed on page load — user must click to open.
   });
 
@@ -417,7 +430,7 @@
       s.style.opacity = '1';
     }
     // Attempt a standard alert as a last resort for visibility
-    alert('NagaSai AI has been updated or reloaded. Please refresh this page to continue using the extension.');
+    // alert('NagaSai AI has been updated or reloaded. Please refresh this page to continue using the extension.');
   }
 
   // ── Auth ───────────────────────────────────────────────────────
@@ -582,6 +595,7 @@
     ]);
 
     if (res && res.success) {
+      chrome.storage.local.remove(K.IS_GUEST);
       authState = { signedIn: true, user: res.user, token: res.token };
       renderView();
     } else {
@@ -592,6 +606,7 @@
 
   async function handleSignOut() {
     await sendMsg({ type: T.SIGN_OUT });
+    chrome.storage.local.remove(K.IS_GUEST);
     authState = { signedIn: false, user: null, token: null };
     chatHistory = [];
     chrome.storage.local.set({ [K.CHAT_HISTORY]: [] }); // Fix: Clear storage on sign out
@@ -599,22 +614,24 @@
     renderView();
   }
 
-  function handleAlternativeBrowserMode() {
-    // Clear storage first to prevent history bleed
-    chrome.storage.local.set({ [K.CHAT_HISTORY]: [] });
+  function handleAlternativeBrowserMode(silent = false) {
+    if (!silent) {
+      // Clear storage first to prevent history bleed
+      chrome.storage.local.set({ [K.CHAT_HISTORY]: [], [K.IS_GUEST]: true });
+      
+      // Set a specialized welcome message
+      chatHistory = [{
+        role: 'assistant',
+        content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
+      }];
+    }
 
     // Fake a minimal auth state to bypass sign-in screen
     authState = { signedIn: true, user: { name: 'Anonymous', given_name: 'Guest', picture: '' }, token: 'local-only' };
 
-    // Set a specialized welcome message
-    chatHistory = [{
-      role: 'assistant',
-      content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
-    }];
-
     currentView = 'chat';
     renderView();
-    saveChatHistory();
+    if (!silent) saveChatHistory();
   }
 
   // ── API Keys (Bug #3 Fix: save ALL key fields including custom) ─
@@ -727,7 +744,9 @@ If the page contains a code editor (like LeetCode, GitHub, etc.) and the user as
 - Use the same language and coding style as seen in the editor.
 - Always provide the full solution including the original given signatures to ensure the code remains a valid, runnable unit.
 
-Always detect the user's intent FIRST before responding.
+Always detect the user's intent FIRST before responding. 
+
+IMPORTANT: NEVER include any signatures, footer messages, or 'Powered by' statements in your response. Provide only the answer itself.
 
 Current Page: "${document.title}"
 URL: ${window.location.href}

@@ -49,12 +49,14 @@ async function callPollinations(model, messages) {
 // This keeps the extension output clean for end users.
 function stripPollinationsAd(text) {
     if (!text) return text;
-    // Match the separator + ad block Pollinations injects at the end of responses.
-    // Covers variations: em-dash, regular dash rows, emoji patterns, URL references.
+    // Match common separators + promotional blocks Pollinations injects
+    // Covers: --- Support Pollinations ---, 🌸 Powered by..., etc.
+    // Also catches "Powered by Pollinations" in any case and with or without URL.
     return text
-        .replace(/\n*---+\n*Support Pollinations[\s\S]*/i, '')
+        .replace(/\n*---+\n*(Support|Powered by) Pollinations[\s\S]*/i, '')
         .replace(/\n*---+\n*🌸[\s\S]*/i, '')
-        .replace(/\n*Powered by Pollinations\.AI[\s\S]*/i, '')
+        .replace(/\n*(Powered by|Support) Pollinations(\.AI)?[\s\S]*/i, '')
+        .replace(/\n*Pollinations\.AI[\s\S]*/i, '')
         .trim();
 }
 

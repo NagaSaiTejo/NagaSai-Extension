@@ -22,10 +22,10 @@ Got a complex chart, a weird error message, or a design you want to discuss? Cli
 ### 4. Stealth Mode
 Sharing your screen on Zoom or Teams? Use **Alt + Shift + H** (or the Green Eye icon) to enter **Stealth Mode**. This instantly closes the panels and makes the "S" toggle nearly invisible (transparent). Only you know where it is, keeping your AI assistant private during presentations.
 
-### 5. Multi-Model Powerhouse
-Switch models mid-conversation! 
-- **Free AI:** Powered by Pollinations.ai for instant, key-less access.
-- **Bring Your Own Key:** Securely add your own API keys for **Google Gemini, Groq, or OpenAI** in the Settings tab to unlock higher rate limits and pro models.
+### 5. Flexible Authentication
+NagaSai AI provides two ways to access powerful AI:
+- **Google Sign-in (Recommended):** Sign in once with Google to unlock **Free AI** (GPT-4o Mini). This mode allows you to start chatting instantly without managing any API keys.
+- **Guest Mode (BYO Key):** Tap "Not google browser" to use the extension without a Google account. In this mode, the UI is locked until you provide your own API keys for **Google Gemini, Groq, or OpenAI** in the Settings tab. This gives you total control over the models and rate limits you use.
 
 ---
 
