@@ -82,8 +82,8 @@
 /* ─── Toggle Button ─────────────────────────────────────────── */
 #nagasai-toggle {
   position: fixed !important;
-  bottom: 24px !important;
-  right: 24px !important;
+  bottom: 12px !important;
+  right: 12px !important;
   width: 32px !important;
   height: 32px !important;
   border-radius: 50% !important;
@@ -145,8 +145,8 @@
 /* ─── Panel ─────────────────────────────────────────────────── */
 #nagasai-panel {
   position: fixed !important;
-  bottom: 65px !important;
-  right: 20px !important;
+  bottom: 53px !important;
+  right: 12px !important;
   pointer-events: all !important;
   width: 320px !important;
   height: 340px !important;

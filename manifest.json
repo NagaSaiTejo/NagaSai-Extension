@@ -21,10 +21,14 @@
         "<all_urls>"
       ],
       "js": [
+        "libs/pdf.min.js",
+        "libs/pdf.worker.min.js",
+        "libs/mammoth.browser.min.js",
         "shared.js",
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "permissions": [
@@ -40,7 +44,9 @@
     "https://text.pollinations.ai/*",
     "https://gen.pollinations.ai/*",
     "https://www.googleapis.com/*",
-    "https://accounts.google.com/*"
+    "https://accounts.google.com/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*"
   ],
   "oauth2": {
     "client_id": "814686278793-bodg7tep4a9oh16e63j9s9gc9grosc2e.apps.googleusercontent.com",

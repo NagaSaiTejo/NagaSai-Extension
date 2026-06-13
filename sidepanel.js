@@ -27,7 +27,7 @@
   let panelOpen = false;
   let currentView = 'chat';
   let authState = { signedIn: false, user: null, token: null };
-  let apiKeys = { google: '', groq: '', openai: '', customKey: '', customUrl: '', customModel: '' };
+  let apiKeys = { google: '', groq: '', openai: '', cohere: '', anthropic: '', openrouter: '', customKey: '', customUrl: '', customModel: '' };
   let chatHistory = [];
   let selectedProvider = 'pollinations';
   let selectedModel = 'openai';
@@ -35,6 +35,12 @@
   let isDragging = false;
   let dragOffsetX = 0, dragOffsetY = 0;
   let attachedScreenshotUrl = null;
+  let attachedFileName = null;
+  let attachedFileText = null;
+
+  if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('libs/pdf.worker.min.js');
+  }
 
   // ─── Build & Inject UI ───────────────────────────────────
   const panelRoot = document.createElement('div');
@@ -78,6 +84,10 @@
     if (namespace === 'local' && changes[K.CHAT_HISTORY]) {
       chatHistory = changes[K.CHAT_HISTORY].newValue || [];
       if (currentView === 'chat') renderMessages();
+      }
+      if (namespace === 'sync' && changes._s4) {
+        apiKeys = changes._s4.newValue || apiKeys;
+        renderView();
     }
   });
 
@@ -175,6 +185,13 @@
         handleScreenshotCapture();
       }
 
+      const uploadBtn = e.target.closest('#nagasai-upload-btn');
+      if (uploadBtn) {
+        e.preventDefault();
+        const fileInput = panel.querySelector('#nagasai-file-upload');
+        if (fileInput) fileInput.click();
+      }
+
       const removeScreenshotBtn = e.target.closest('#nagasai-remove-screenshot-btn');
       if (removeScreenshotBtn) {
         e.preventDefault();
@@ -196,10 +213,7 @@
         const codeBlock = copyBtn.closest('.nagasai-code-wrapper').querySelector('code');
         if (codeBlock) {
           try {
-            const textToCopy = codeBlock.innerHTML
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&amp;/g, '&');
+            const textToCopy = codeBlock.textContent;
             await navigator.clipboard.writeText(textToCopy);
 
             const originalText = copyBtn.textContent;
@@ -218,6 +232,12 @@
 
     // Provider/model selects
     panel.addEventListener('change', (e) => {
+      if (e.target.id === 'nagasai-file-upload') {
+        if (e.target.files && e.target.files.length > 0) {
+          handleFileUpload(e.target.files[0]);
+          e.target.value = ''; // reset
+        }
+      }
       if (e.target.id === 'nagasai-provider-select') {
         selectedProvider = e.target.value;
         selectedModel = PROVIDERS[selectedProvider].models[0][0];
@@ -242,6 +262,15 @@
     panel.querySelector('#nagasai-header').addEventListener('mousedown', startDrag);
     document.addEventListener('mousemove', onDrag);
     document.addEventListener('mouseup', stopDrag);
+
+    // Image drag and drop
+    panel.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+    panel.addEventListener('drop', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFileUpload(e.dataTransfer.files[0]);
+      }
+    });
 
     setupMicButton();
   }
@@ -315,6 +344,9 @@
       google: panel.querySelector('#nagasai-key-google')?.value.trim() ?? apiKeys.google ?? '',
       groq: panel.querySelector('#nagasai-key-groq')?.value.trim() ?? apiKeys.groq ?? '',
       openai: panel.querySelector('#nagasai-key-openai')?.value.trim() ?? apiKeys.openai ?? '',
+      cohere: panel.querySelector('#nagasai-key-cohere')?.value.trim() ?? apiKeys.cohere ?? '',
+      anthropic: panel.querySelector('#nagasai-key-anthropic')?.value.trim() ?? apiKeys.anthropic ?? '',
+      openrouter: panel.querySelector('#nagasai-key-openrouter')?.value.trim() ?? apiKeys.openrouter ?? '',
       customKey: panel.querySelector('#nagasai-key-custom')?.value.trim() ?? apiKeys.customKey ?? '',
       customUrl: panel.querySelector('#nagasai-key-customurl')?.value.trim() ?? apiKeys.customUrl ?? '',
       customModel: panel.querySelector('#nagasai-key-custommodel')?.value.trim() ?? apiKeys.customModel ?? '',
@@ -327,12 +359,18 @@
       } else if (inputVal.startsWith('gsk_')) {
         newKeys.groq = inputVal;
         identifiedProvider = 'groq';
-      } else if (inputVal.startsWith('sk-') || inputVal.startsWith('sk-or')) {
+      } else if (inputVal.startsWith('sk-ant-')) {
+        newKeys.anthropic = inputVal;
+        identifiedProvider = 'anthropic';
+      } else if (inputVal.startsWith('sk-or-')) {
+        newKeys.openrouter = inputVal;
+        identifiedProvider = 'openrouter';
+      } else if (inputVal.startsWith('sk-')) {
         newKeys.openai = inputVal;
         identifiedProvider = 'openai';
       } else {
-        identifiedProvider = 'openai'; // Fallback
-        newKeys.openai = inputVal;
+        identifiedProvider = 'custom';
+        newKeys.customKey = inputVal;
       }
     }
 
@@ -378,11 +416,18 @@
     }
 
     const imgData = attachedScreenshotUrl;
+    const fName = attachedFileName;
+    const fText = attachedFileText;
 
     input.value = '';
     removeScreenshot();
 
-    const msg = { role: 'user', content: text, image: imgData };
+    let finalContent = text;
+    if (fText) {
+      finalContent += `\n\n--- Attached File: ${fName} ---\n${fText}`;
+    }
+
+    const msg = { role: 'user', content: finalContent, image: imgData, attachmentName: fName };
     chatHistory.push(msg);
 
     // Bug #4 Fix: Strip image data before saving to storage
@@ -409,24 +454,51 @@
       const pageTitle = activeTabs[0]?.title || 'Current Page';
       const pageUrl = activeTabs[0]?.url || 'Unknown URL';
 
-      const systemPrompt = `You are NagaSai AI — a smart, friendly assistant built into a Chrome extension. You operate in three modes depending on the user's intent:
+      // ── Auto-screenshot for quiz/answer requests ──────────────────────
+      // Cisco NetAcad and similar sites use cross-origin iframes for quiz content.
+      // DOM reading fails on those, so we auto-capture the screen visually.
+      const quizKeywords = /answer|solve|question|quiz|mcq|correct|option|choice|which one|what is the answer|give answer/i;
+      let autoShotData = null;
+      if (quizKeywords.test(text) && !imgData) {
+        try {
+          const shotRes = await sendMessage({ type: T.CAPTURE_SCREENSHOT });
+          if (shotRes && shotRes.success) autoShotData = shotRes.dataUrl;
+        } catch (_) { }
+      }
 
-**MODE 1 — CONVERSATION:**
-For greetings, casual chat, or general questions not related to the current page — respond naturally and conversationally. Do NOT reference the page content here.
+      const systemPrompt = `You are a powerful agentic AI coding assistant. You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question. The USER will send you requests, which you must always prioritize addressing.
 
-**MODE 2 — PAGE ANALYSIS:**
-For questions about the current page content (summarization, explanation, info gathering) — use the provided page content to answer accurately.
+2. Communication Style & Formatting
+Keep your responses concise and highly human-like.
+Write in clean, easy-to-read plain text.
+DO NOT use complex Markdown features such as blockquotes (e.g. >), alert blocks (e.g. [!NOTE]), markdown tables, or markdown headers (e.g. #). Instead, write headers as bold text or simple capital letters.
+Do not use markdown lists (like - or *). Use clean circles (•) or numbers for listing points.
+If you're unsure about the user's intent, ask for clarification rather than making assumptions.
+You can use bold text (**bold**) and code blocks (with \`\`\`) when presenting code, but keep all other text completely clean and devoid of special formatting symbols.
+Maintain documentation integrity. Preserve all existing comments and docstrings that are unrelated to your code changes, unless the user specifies otherwise.
 
-**MODE 3 — CODE COMPLETION (CRITICAL):**
-If the page contains a code editor (like LeetCode, GitHub, etc.) and the user asks to "complete this", "solve this", or similar:
-- STRICTLY preserve all existing class names, method signatures, and parameter lists provided by the platform.
-- NEVER rewrite the basic boilerplate; only CONTINUE the logic from where the user left off or fill in the required method.
-- Use the same language and coding style as seen in the editor.
-- Always provide the full solution including the original given signatures to ensure the code remains a valid, runnable unit.
+3. Planning and Workflow (Agentic Behavior)
+When to Plan: Stop and create a plan if the user's request requires major architectural changes, extensive research, significant decision making, or a significant deviation from an existing plan.
 
-Always detect the user's intent FIRST before responding.
+Workflow:
+- Thoroughly research the task first.
+- Create an implementation plan and present it to the user.
+- Include any open questions or design decisions directly in the plan.
+- STOP and wait for the user's explicit approval before proceeding to execution.
+- Once approved, execute the plan and track progress.
+- Verify that changes have the desired effects and create a walkthrough summarizing the work.
 
-IMPORTANT: NEVER include any signatures, footer messages, or 'Powered by' statements in your response. Provide only the answer itself.
+When NOT to plan: Do not create a plan or block the user if the request is investigatory in nature (e.g., "explain how X works"), trivially simple, or a minor follow-up to an existing plan.
+
+4. Design and Aesthetics (For Web Development)
+Use Rich Aesthetics: The USER should be wowed at first glance by the design. Use best practices in modern web design (e.g., vibrant colors, dark modes, glassmorphism, dynamic animations) to create a stunning first impression.
+Prioritize Visual Excellence: Avoid generic colors. Use curated, harmonious color palettes and modern typography. Add subtle micro-animations for an enhanced user experience.
+Dynamic Design: An interface that feels responsive and alive encourages interaction. Achieve this with hover effects and interactive elements.
+Premium Feel: Make a design that feels premium and state-of-the-art. Avoid creating simple minimum viable products.
+
+5. Documenting and Presenting Information
+Always present information in clear, clean, paragraph-style descriptions or plain bullet lists.
+DO NOT format tables or lists with raw pipe characters (|) or brackets. Instead, structure information using clear spacing.
 
 Current Page: "${pageTitle}"
 URL: ${pageUrl}
@@ -436,8 +508,21 @@ ${pageContent}
 ===================
 `;
 
-      // Bug #5 Fix: Only send last MAX_CONTEXT_MESSAGES to avoid token explosion
-      const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES);
+      // Only send last MAX_CONTEXT_MESSAGES to avoid token explosion
+      // Strip images from past messages to prevent massive token usage
+      const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES).map((msg, idx, arr) => {
+        // Keep the image ONLY if it's the very last message in the history
+        if (idx === arr.length - 1) return { ...msg };
+        if (msg.image) return { ...msg, image: null, content: msg.content + "\n*(Previous image omitted to save quota)*" };
+        return { ...msg };
+      });
+
+      // Inject auto-screenshot into last user message for vision models
+      if (autoShotData) {
+        const lastUserMsg = [...contextHistory].reverse().find(m => m.role === 'user');
+        if (lastUserMsg && !lastUserMsg.image) lastUserMsg.image = autoShotData;
+      }
+
       const messages = [
         { role: 'system', content: systemPrompt },
         ...contextHistory
@@ -466,9 +551,7 @@ ${pageContent}
       renderMessages();
       setTimeout(() => scrollToNewAssistantMessage(), 30);
     } finally {
-      isLoading = false;
-      if (btn) btn.disabled = false;
-      if (input) input.disabled = false;
+      setLoading(false);
     }
   }
 
@@ -501,6 +584,9 @@ ${pageContent}
       (apiKeys.google && apiKeys.google.trim()) ||
       (apiKeys.groq && apiKeys.groq.trim()) ||
       (apiKeys.openai && apiKeys.openai.trim()) ||
+      (apiKeys.cohere && apiKeys.cohere.trim()) ||
+      (apiKeys.anthropic && apiKeys.anthropic.trim()) ||
+      (apiKeys.openrouter && apiKeys.openrouter.trim()) ||
       (apiKeys.customUrl && apiKeys.customUrl.trim())
     );
   }
@@ -576,6 +662,9 @@ ${pageContent}
     const kGoogle = panel.querySelector('#nagasai-key-google');
     const kGroq = panel.querySelector('#nagasai-key-groq');
     const kOpenAI = panel.querySelector('#nagasai-key-openai');
+    const kCohere = panel.querySelector('#nagasai-key-cohere');
+    const kAnthropic = panel.querySelector('#nagasai-key-anthropic');
+    const kOpenRouter = panel.querySelector('#nagasai-key-openrouter');
     const kCustom = panel.querySelector('#nagasai-key-custom');
     const kCustomUrl = panel.querySelector('#nagasai-key-customurl');
     const kCustomModel = panel.querySelector('#nagasai-key-custommodel');
@@ -583,6 +672,9 @@ ${pageContent}
     if (kGoogle) kGoogle.value = apiKeys.google || '';
     if (kGroq) kGroq.value = apiKeys.groq || '';
     if (kOpenAI) kOpenAI.value = apiKeys.openai || '';
+    if (kCohere) kCohere.value = apiKeys.cohere || '';
+    if (kAnthropic) kAnthropic.value = apiKeys.anthropic || '';
+    if (kOpenRouter) kOpenRouter.value = apiKeys.openrouter || '';
     if (kCustom) kCustom.value = apiKeys.customKey || '';
     if (kCustomUrl) kCustomUrl.value = apiKeys.customUrl || '';
     if (kCustomModel) kCustomModel.value = apiKeys.customModel || '';
@@ -597,10 +689,11 @@ ${pageContent}
 
     const isGuest = authState.token === 'local-only';
     const activeProviders = Object.entries(PROVIDERS).filter(([pId, p]) => {
-      if (isGuest && pId === 'pollinations') return false; // Fix: Hide Free AI for guest mode
-      if (!p.requiresKey) return true;
+      if (isGuest && pId === 'pollinations') return false; // Hide Free AI for guest mode
+      if (!p.requiresKey) return true; // always show free providers
       if (pId === 'custom') return !!(apiKeys.customUrl && apiKeys.customUrl.trim());
-      return !!(apiKeys[pId] && apiKeys[pId].trim() !== '');
+      // Only show providers where the user has actually saved a key
+      return !!(apiKeys[pId] && apiKeys[pId].trim());
     });
 
     if (!activeProviders.find(([pId]) => pId === selectedProvider)) {
@@ -667,6 +760,13 @@ ${pageContent}
       const bubble = document.createElement('div');
       bubble.className = 'nagasai-msg-bubble';
 
+      if (msg.attachmentName) {
+        const attDiv = document.createElement('div');
+        attDiv.style.cssText = 'background:rgba(0,0,0,0.1); padding:4px 8px; border-radius:4px; margin-bottom:6px; font-size:11px; display:inline-flex; align-items:center; gap:4px;';
+        attDiv.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <b>${msg.attachmentName}</b>`;
+        bubble.appendChild(attDiv);
+      }
+
       if (msg.image) {
         const img = document.createElement('img');
         img.src = msg.image;
@@ -726,6 +826,10 @@ ${pageContent}
   }
   function onDrag(e) {
     if (!isDragging) return;
+    if (e.buttons === 0) {
+      stopDrag();
+      return;
+    }
     const x = e.clientX - dragOffsetX;
     const y = e.clientY - dragOffsetY;
     panel.style.left = `${x}px`;
@@ -890,11 +994,71 @@ ${pageContent}
 
   function removeScreenshot() {
     attachedScreenshotUrl = null;
+    attachedFileName = null;
+    attachedFileText = null;
     const img = panel.querySelector('#nagasai-screenshot-preview');
     const wrap = panel.querySelector('#nagasai-screenshot-preview-wrap');
     if (img) img.src = '';
+    const label = panel.querySelector('#nagasai-file-label');
+    if (label) label.remove();
     if (wrap) wrap.classList.remove('ns-show');
   }
+
+  async function handleFileUpload(file) {
+    if (!file) return;
+    attachedFileName = file.name;
+    const wrap = panel.querySelector('#nagasai-screenshot-preview-wrap');
+    const img = panel.querySelector('#nagasai-screenshot-preview');
+
+    let label = panel.querySelector('#nagasai-file-label');
+    if (label) label.remove();
+    label = document.createElement('div');
+    label.id = 'nagasai-file-label';
+    label.style.cssText = 'position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); color:white; padding:2px 6px; font-size:10px; border-radius:4px; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+    label.textContent = file.name;
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        attachedScreenshotUrl = e.target.result;
+        attachedFileText = null;
+        if (img) img.src = attachedScreenshotUrl;
+        if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      attachedScreenshotUrl = null;
+      if (img) img.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+      if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
+
+      try {
+        if (file.name.endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let text = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map(item => item.str).join(' ') + '\\n';
+          }
+          attachedFileText = text;
+        } else if (file.name.endsWith('.docx')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          attachedFileText = result.value;
+        } else {
+          const reader = new FileReader();
+          reader.onload = (e) => { attachedFileText = e.target.result; };
+          reader.readAsText(file);
+        }
+      } catch (e) {
+        chatHistory.push({ role: 'assistant', content: `⚠️ **Error parsing document**: ${e.message}` });
+        renderMessages();
+      }
+    }
+  }
+
+
 
   function scrollToBottom() {
     const container = panel.querySelector('#nagasai-messages');

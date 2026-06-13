@@ -18,9 +18,9 @@ window.NagaSaiShared = {
     groq: {
       label: 'Groq', badge: 'API Key', requiresKey: true,
       models: [
+        ['openai/gpt-oss-20b', 'OpenAI GPT OSS 20B'],
+        ['openai/gpt-oss-120b', 'OpenAI GPT OSS 120B'],
         ['llama-3.3-70b-versatile', 'Llama 3.3 70B'],
-        ['mixtral-8x7b-32768', 'Mixtral 8x7B'],
-        ['gemma2-9b-it', 'Gemma 2 9B']
       ],
       keyUrl: 'https://console.groq.com/keys'
     },
@@ -33,6 +33,40 @@ window.NagaSaiShared = {
       ],
       keyUrl: 'https://platform.openai.com/api-keys'
     },
+    anthropic: {
+      label: 'Anthropic Claude', badge: 'API Key', requiresKey: true,
+      models: [
+        ['claude-3-7-sonnet-20250219', 'Claude 3.7 Sonnet'],
+        ['claude-3-5-sonnet-20241022', 'Claude 3.5 Sonnet'],
+        ['claude-3-5-haiku-20241022', 'Claude 3.5 Haiku']
+      ],
+      keyUrl: 'https://console.anthropic.com/settings/keys'
+    },
+    openrouter: {
+      label: 'OpenRouter (Free)', badge: 'API Key', requiresKey: true,
+      models: [
+        ['openrouter/free', 'Auto Free Router'],
+        ['openai/gpt-oss-120b:free', 'OpenAI gpt-oss-120b'],
+        ['openai/gpt-oss-20b', 'OpenAI GPT OSS 20B'],
+        ['google/gemma-3-27b-it', 'Gemma 3 27B']
+      ],
+      keyUrl: 'https://openrouter.ai/settings/keys'
+    },
+    cohere: {
+      label: 'Cohere',
+      badge: 'FREE Trial',
+      requiresKey: true,
+
+      models: [
+        ['command-a', 'Command A'],
+        ['command-r-plus', 'Command R+'],
+        ['command-r', 'Command R'],
+        ['command-light', 'Command Light']
+      ],
+
+      keyUrl: 'https://dashboard.cohere.com/api-keys'
+    },
+
     custom: {
       label: 'Custom API', badge: 'Advanced', requiresKey: true,
       models: [['custom-model', 'Custom Model']],
@@ -49,25 +83,104 @@ window.NagaSaiShared = {
 
   formatMessage: function (text) {
     if (!text || typeof text !== 'string') return '';
+
+    // Strip out Markdown table divider rows (e.g. |---|---|)
+    text = text.replace(/^\s*\|[-|:\s]+\|\s*$/gm, '');
+
+    // Strip out leading blockquote characters and markdown alert headers (e.g. > [!NOTE] or >)
+    text = text.replace(/^\s*>\s*(?:\[!(?:NOTE|IMPORTANT|WARNING|TIP|CAUTION)\])?\s*/gim, '');
+
+    // Replace common LaTeX symbols for better readability
+    const latexMap = {
+      '\\\\le': '≤',
+      '\\\\ge': '≥',
+      '\\\\neq': '≠',
+      '\\\\approx': '≈',
+      '\\\\pm': '±',
+      '\\\\cdot': '·',
+      '\\\\times': '×',
+      '\\\\div': '÷',
+      '\\\\infty': '∞',
+      '\\\\pi': 'π',
+      '\\\\theta': 'θ',
+      '\\\\alpha': 'α',
+      '\\\\beta': 'β',
+      '\\\\gamma': 'γ',
+      '\\\\Delta': 'Δ',
+      '\\\\delta': 'δ',
+      '\\\\sum': '∑',
+      '\\\\prod': '∏',
+      '\\\\int': '∫',
+      '\\\\rightarrow': '→',
+      '\\\\leftarrow': '←',
+      '\\\\Rightarrow': '⇒',
+      '\\\\Leftarrow': '⇐',
+      '\\\\iff': '⇔'
+    };
+
+    for (const [key, value] of Object.entries(latexMap)) {
+      text = text.replace(new RegExp(key + '(?![a-zA-Z])', 'g'), value);
+    }
+
+    // Clean up math block delimiters
+    text = text.replace(/\\\[/g, '').replace(/\\\]/g, '').replace(/\\\(/g, '').replace(/\\\)/g, '');
+
+    const codeBlocks = [];
+    // Match closed blocks
+    text = text.replace(/```[^\n]*\n([\s\S]*?)```/g, (match, p1) => {
+      codeBlocks.push(p1);
+      return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+    });
+    // Match unclosed block at end of stream
+    text = text.replace(/```[^\n]*\n([\s\S]*)$/, (match, p1) => {
+      codeBlocks.push(p1);
+      return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+    });
+
+    const inlineCodes = [];
+    text = text.replace(/`([^`\n]+)`/g, (match, p1) => {
+      inlineCodes.push(p1);
+      return `__INLINE_CODE_${inlineCodes.length - 1}__`;
+    });
+
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html = html.replace(/```[^\n]*\n([\s\S]*?)```/g, (_, p1) =>
-      `<div class="nagasai-code-wrapper"><div class="nagasai-code-header"><button class="nagasai-copy-btn" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div><pre class="nagasai-code"><code>${p1}</code></pre></div>`
-    );
-    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    
+    // Process markdown headings - strip the '#' and make bold
+    html = html.replace(/^\s*#{1,6}\s+(.+)$/gm, '<strong>$1</strong>');
+    
+    // Process markdown lists
+    html = html.replace(/^\s*[-*+]\s+(.+)$/gm, '• $1');
+    html = html.replace(/^\s*(\d+)\.\s+(.+)$/gm, '$1. $2');
+
+    // Process bold and italic markers
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    html = html.replace(/^#{1,6}\s+(.+)$/gm, '<strong>$1</strong>');
-    html = html.replace(/^[-*]\s+(.+)$/gm, '• $1');
-    const parts = html.split(/(<pre[\s\S]*?<\/pre>)/);
-    for (let i = 0; i < parts.length; i++) {
-      if (!parts[i].startsWith('<pre')) parts[i] = parts[i].replace(/\n/g, '<br>');
-    }
-    return parts.join('');
+
+    // Render table rows nicely if they contain pipe characters
+    html = html.replace(/^\s*\|(.+)\|$/gm, (match, content) => {
+      const cols = content.split('|').map(c => c.trim()).filter(c => c);
+      return cols.join(' | ');
+    });
+
+    const parts = html.split('\n');
+    html = parts.join('<br>');
+
+    html = html.replace(/__INLINE_CODE_(\d+)__/g, (match, index) => {
+      const escaped = inlineCodes[index].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<code>${escaped}</code>`;
+    });
+
+    html = html.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
+      const escaped = codeBlocks[index].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<div class="nagasai-code-wrapper"><div class="nagasai-code-header"><button class="nagasai-copy-btn" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div><pre class="nagasai-code"><code>${escaped}</code></pre></div>`;
+    });
+
+    return html;
   },
 
   buildPanelHTML: function (isSidePanel) {
     return `
-    <div id="nagasai-panel" data-ns="panel">
+    <div id="nagasai-panel" data-ns="panel" style="display: none;">
       <div id="nagasai-header">
         <div class="nagasai-header-left">
           <div class="nagasai-logo-pulse"></div>
@@ -148,6 +261,10 @@ window.NagaSaiShared = {
             <button id="nagasai-remove-screenshot-btn" class="nagasai-remove-screenshot-btn">✕</button>
           </div>
           <div class="nagasai-input-controls">
+            <input type="file" id="nagasai-file-upload" accept="image/*,.pdf,.docx,.txt,.csv,.md" style="display: none;" />
+            <button id="nagasai-upload-btn" class="nagasai-screenshot-btn" title="Upload File or Image">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </button>
             <button id="nagasai-screenshot-btn" class="nagasai-screenshot-btn" title="Attach Screenshot">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
             </button>
@@ -179,8 +296,20 @@ window.NagaSaiShared = {
               <input type="password" id="nagasai-key-groq" placeholder="gsk_..." value="" />
             </div>
             <div class="nagasai-key-group">
-              <label>OpenAI / OpenRouter Key <a href="${this.PROVIDERS.openai.keyUrl}" target="_blank">(Get key)</a></label>
+              <label>OpenAI Key <a href="${this.PROVIDERS.openai.keyUrl}" target="_blank">(Get key)</a></label>
               <input type="password" id="nagasai-key-openai" placeholder="sk-..." value="" />
+            </div>
+            <div class="nagasai-key-group">
+              <label>Anthropic Claude Key <a href="${this.PROVIDERS.anthropic.keyUrl}" target="_blank">(Get key)</a></label>
+              <input type="password" id="nagasai-key-anthropic" placeholder="sk-ant-..." value="" />
+            </div>
+            <div class="nagasai-key-group">
+              <label>OpenRouter Key <a href="${this.PROVIDERS.openrouter.keyUrl}" target="_blank">(Get free models)</a></label>
+              <input type="password" id="nagasai-key-openrouter" placeholder="sk-or-v1-..." value="" />
+            </div>
+            <div class="nagasai-key-group">
+              <label>Cohere API Key <a href="${this.PROVIDERS.cohere.keyUrl}" target="_blank">(Get free key)</a></label>
+              <input type="password" id="nagasai-key-cohere" placeholder="xxxxxx..." value="" />
             </div>
             <hr style="border:0;height:1px;background:rgba(255,255,255,0.1);margin:12px 0;">
             <div class="nagasai-key-group">
@@ -201,7 +330,7 @@ window.NagaSaiShared = {
             </p>
             <div class="nagasai-key-group">
               <label>Paste API Key</label>
-              <input type="password" id="nagasai-key-smart" placeholder="sk-..., gsk_..., or AIza..." value="" />
+              <input type="password" id="nagasai-key-smart" placeholder="sk-ant-..., sk-..., gsk_..., etc." value="" />
             </div>
             <button id="nagasai-save-keys-btn" class="nagasai-google-btn" style="margin-top:5px;padding:7px;">Save &amp; Unlock Provider</button>
             <p id="nagasai-keys-msg" style="font-size:10.5px;color:#1dba8a;display:none;text-align:center;margin-top:2px;"></p>

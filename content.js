@@ -1,6 +1,9 @@
 // Page content helper script
 (function () {
-  if (document.getElementById('__pr_root__')) return;
+  const existingRoot = document.getElementById('__pr_root__');
+  if (existingRoot) {
+    existingRoot.remove();
+  }
 
   // ── Obfuscated message types (must match background.js) ────────
   const T = {
@@ -23,7 +26,6 @@
   const K = {
     CHAT_HISTORY: '_c1',
     PREFERRED_MODE: '_c2',
-    IS_GUEST: '_c3',
   };
 
   // ── Port name (must match background.js) ───────────────────────
@@ -40,7 +42,7 @@
   let panelOpen = false;
   let currentView = 'chat';
   let authState = { signedIn: false, user: null, token: null };
-  let apiKeys = { google: '', groq: '', openai: '', customKey: '', customUrl: '', customModel: '' };
+  let apiKeys = { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' };
   let chatHistory = [];
   let selectedProvider = 'pollinations';
   let selectedModel = 'openai';
@@ -61,18 +63,10 @@
   function revealUI() {
     if (uiRevealed) return;
     uiRevealed = true;
-    
-    // Only show if stylesheet is actually loaded
-    if (shadowRoot.adoptedStyleSheets.length > 0) {
-      shadowHost.style.setProperty('display', 'block', 'important');
-      shadowHost.style.setProperty('opacity', '1', 'important');
-      if (!isStealth) {
-        toggleBtn.style.setProperty('opacity', panelOpen ? '1' : '0.4', 'important');
-        toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
-      }
-    } else {
-      // Styles failed (likely context invalidated) - keep hidden or show error
-      showContextError();
+    shadowHost.style.setProperty('opacity', '1', 'important');
+    if (!isStealth) {
+      toggleBtn.style.setProperty('opacity', panelOpen ? '1' : '0.4', 'important');
+      toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
     }
   }
   // Fallback reveal
@@ -95,7 +89,6 @@
     'height:100%',
     'z-index:2147483647',
     'pointer-events:none',
-    'display:none',
     'opacity:0',
     'transition:opacity 0.4s ease',
   ].join('!important;') + '!important;';
@@ -172,8 +165,8 @@
 
     el.style.cssText = [
       'position:fixed !important',
-      'bottom:24px !important',
-      'right:24px !important',
+      'bottom:07px !important',
+      'right:05px !important',
       'width:34px !important',
       'height:34px !important',
       'border-radius:50% !important',
@@ -222,13 +215,7 @@
   // ── Inject CSS into shadow root via adoptedStyleSheets ─────────
   (async () => {
     try {
-      if (!document.getElementById('__pr_fonts__')) {
-        const fontLink = document.createElement('link');
-        fontLink.id = '__pr_fonts__';
-        fontLink.rel = 'stylesheet';
-        fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap';
-        document.head.appendChild(fontLink);
-      }
+
 
       const cssUrl = chrome.runtime.getURL('ui.css');
       const res = await fetch(cssUrl);
@@ -254,11 +241,8 @@
   // Bug #1 Fix: Do NOT auto-open the panel on page load.
   // PREFERRED_MODE is only used to remember WHICH mode to use when the
   // user clicks the 'S' button — NOT to auto-open it on navigation.
-  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE, K.IS_GUEST], (data) => {
+  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE], (data) => {
     if (data[K.CHAT_HISTORY]) chatHistory = data[K.CHAT_HISTORY];
-    if (data[K.IS_GUEST]) {
-      handleAlternativeBrowserMode(true); // silent restore
-    }
     // Panel always starts closed on page load — user must click to open.
   });
 
@@ -319,6 +303,10 @@
     if (namespace === 'local' && changes[K.CHAT_HISTORY]) {
       chatHistory = changes[K.CHAT_HISTORY].newValue || [];
       if (currentView === 'chat' && panelOpen) renderMessages();
+      }
+      if (namespace === 'sync' && changes._s4) {
+        apiKeys = changes._s4.newValue || apiKeys;
+        renderView();
     }
   });
 
@@ -338,6 +326,10 @@
 
   document.addEventListener('mousemove', (e) => {
     if (!isToggleDragging) return;
+    if (e.buttons === 0) {
+      isToggleDragging = false;
+      return;
+    }
     toggleHasMoved = true;
     const dx = e.clientX - lastMouseX;
     const dy = e.clientY - lastMouseY;
@@ -418,7 +410,6 @@
     }
   });
 
-  // Helper to notify user when extension context is lost (e.g. after update)
   function showContextError() {
     toggleBtn.style.setProperty('background', '#ff4d4d', 'important');
     toggleBtn.style.setProperty('transform', 'scale(1.2)', 'important');
@@ -430,7 +421,7 @@
       s.style.opacity = '1';
     }
     // Attempt a standard alert as a last resort for visibility
-    // alert('NagaSai AI has been updated or reloaded. Please refresh this page to continue using the extension.');
+    alert('NagaSai AI has been updated or reloaded. Please refresh this page to continue using the extension.');
   }
 
   // ── Auth ───────────────────────────────────────────────────────
@@ -507,10 +498,6 @@
     panel.addEventListener('click', async (e) => {
       if (e.target.closest('#nagasai-signin-btn')) handleSignIn();
       if (e.target.closest('#nagasai-signout-btn')) handleSignOut();
-      if (e.target.closest('#nagasai-not-google-link')) {
-        e.preventDefault();
-        handleAlternativeBrowserMode();
-      }
       if (e.target.closest('#nagasai-send-btn')) sendUserMessage();
       if (e.target.closest('#nagasai-save-keys-btn')) saveApiKeys();
 
@@ -561,9 +548,8 @@
     });
 
     panel.addEventListener('keydown', (e) => {
-      // Bug Fix: Block keyboard events from bubbling to host page (GitHub shortcuts)
-      e.stopPropagation();
       if (e.target && e.target.id === 'nagasai-input') {
+        e.stopPropagation(); // Prevent host page from intercepting keypresses (like backspace)
         if ((e.key === 'Enter' || e.keyCode === 13) && !e.shiftKey) {
           e.preventDefault();
           sendUserMessage();
@@ -571,9 +557,17 @@
       }
     });
 
-    // Also block keyup/keypress to be absolutely sure no host listeners fire
-    panel.addEventListener('keyup', (e) => e.stopPropagation());
-    panel.addEventListener('keypress', (e) => e.stopPropagation());
+    panel.addEventListener('keyup', (e) => {
+      if (e.target && e.target.id === 'nagasai-input') {
+        e.stopPropagation();
+      }
+    });
+
+    panel.addEventListener('keypress', (e) => {
+      if (e.target && e.target.id === 'nagasai-input') {
+        e.stopPropagation();
+      }
+    });
 
     setupMicButton();
 
@@ -595,7 +589,6 @@
     ]);
 
     if (res && res.success) {
-      chrome.storage.local.remove(K.IS_GUEST);
       authState = { signedIn: true, user: res.user, token: res.token };
       renderView();
     } else {
@@ -606,32 +599,10 @@
 
   async function handleSignOut() {
     await sendMsg({ type: T.SIGN_OUT });
-    chrome.storage.local.remove(K.IS_GUEST);
     authState = { signedIn: false, user: null, token: null };
     chatHistory = [];
-    chrome.storage.local.set({ [K.CHAT_HISTORY]: [] }); // Fix: Clear storage on sign out
     currentView = 'chat';
     renderView();
-  }
-
-  function handleAlternativeBrowserMode(silent = false) {
-    if (!silent) {
-      // Clear storage first to prevent history bleed
-      chrome.storage.local.set({ [K.CHAT_HISTORY]: [], [K.IS_GUEST]: true });
-      
-      // Set a specialized welcome message
-      chatHistory = [{
-        role: 'assistant',
-        content: '👋 Hi! To use NagaSai AI in this browser, please click the **Settings** button (⚙️) and paste your API key to start.'
-      }];
-    }
-
-    // Fake a minimal auth state to bypass sign-in screen
-    authState = { signedIn: true, user: { name: 'Anonymous', given_name: 'Guest', picture: '' }, token: 'local-only' };
-
-    currentView = 'chat';
-    renderView();
-    if (!silent) saveChatHistory();
   }
 
   // ── API Keys (Bug #3 Fix: save ALL key fields including custom) ─
@@ -649,6 +620,7 @@
       google: q('#nagasai-key-google')?.value.trim() ?? apiKeys.google ?? '',
       groq: q('#nagasai-key-groq')?.value.trim() ?? apiKeys.groq ?? '',
       openai: q('#nagasai-key-openai')?.value.trim() ?? apiKeys.openai ?? '',
+      cohere: q('#nagasai-key-cohere')?.value.trim() ?? apiKeys.cohere ?? '',
       // Bug #3 Fix: preserve custom provider fields instead of wiping them
       customKey: q('#nagasai-key-custom')?.value.trim() ?? apiKeys.customKey ?? '',
       customUrl: q('#nagasai-key-customurl')?.value.trim() ?? apiKeys.customUrl ?? '',
@@ -676,7 +648,6 @@
         msgEl.style.display = 'block';
         setTimeout(() => msgEl.style.display = 'none', 3000);
       }
-      renderView();
       renderProviderSelect();
       renderMessages();
     } else {
@@ -729,24 +700,39 @@
 
     try {
       const pageContent = extractPageContent() || 'No content found.';
-      const systemPrompt = `You are NagaSai AI — a smart, friendly assistant built into a Chrome extension. You operate in three modes depending on the user's intent:
+      const systemPrompt = `You are a powerful agentic AI coding assistant. You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question. The USER will send you requests, which you must always prioritize addressing.
 
-**MODE 1 — CONVERSATION:**
-For greetings, casual chat, or general questions not related to the current page — respond naturally and conversationally. Do NOT reference the page content here.
+2. Communication Style & Formatting
+Keep your responses concise and highly human-like.
+Write in clean, easy-to-read plain text.
+DO NOT use complex Markdown features such as blockquotes (e.g. >), alert blocks (e.g. [!NOTE]), markdown tables, or markdown headers (e.g. #). Instead, write headers as bold text or simple capital letters.
+Do not use markdown lists (like - or *). Use clean circles (•) or numbers for listing points.
+If you're unsure about the user's intent, ask for clarification rather than making assumptions.
+You can use bold text (**bold**) and code blocks (with \`\`\`) when presenting code, but keep all other text completely clean and devoid of special formatting symbols.
+Maintain documentation integrity. Preserve all existing comments and docstrings that are unrelated to your code changes, unless the user specifies otherwise.
 
-**MODE 2 — PAGE ANALYSIS:**
-For questions about the current page content (summarization, explanation, info gathering) — use the provided page content to answer accurately.
+3. Planning and Workflow (Agentic Behavior)
+When to Plan: Stop and create a plan if the user's request requires major architectural changes, extensive research, significant decision making, or a significant deviation from an existing plan.
 
-**MODE 3 — CODE COMPLETION (CRITICAL):**
-If the page contains a code editor (like LeetCode, GitHub, etc.) and the user asks to "complete this", "solve this", or similar:
-- STRICTLY preserve all existing class names, method signatures, and parameter lists provided by the platform.
-- NEVER rewrite the basic boilerplate; only CONTINUE the logic from where the user left off or fill in the required method.
-- Use the same language and coding style as seen in the editor.
-- Always provide the full solution including the original given signatures to ensure the code remains a valid, runnable unit.
+Workflow:
+- Thoroughly research the task first.
+- Create an implementation plan and present it to the user.
+- Include any open questions or design decisions directly in the plan.
+- STOP and wait for the user's explicit approval before proceeding to execution.
+- Once approved, execute the plan and track progress.
+- Verify that changes have the desired effects and create a walkthrough summarizing the work.
 
-Always detect the user's intent FIRST before responding. 
+When NOT to plan: Do not create a plan or block the user if the request is investigatory in nature (e.g., "explain how X works"), trivially simple, or a minor follow-up to an existing plan.
 
-IMPORTANT: NEVER include any signatures, footer messages, or 'Powered by' statements in your response. Provide only the answer itself.
+4. Design and Aesthetics (For Web Development)
+Use Rich Aesthetics: The USER should be wowed at first glance by the design. Use best practices in modern web design (e.g., vibrant colors, dark modes, glassmorphism, dynamic animations) to create a stunning first impression.
+Prioritize Visual Excellence: Avoid generic colors. Use curated, harmonious color palettes and modern typography. Add subtle micro-animations for an enhanced user experience.
+Dynamic Design: An interface that feels responsive and alive encourages interaction. Achieve this with hover effects and interactive elements.
+Premium Feel: Make a design that feels premium and state-of-the-art. Avoid creating simple minimum viable products.
+
+5. Documenting and Presenting Information
+Always present information in clear, clean, paragraph-style descriptions or plain bullet lists.
+DO NOT format tables or lists with raw pipe characters (|) or brackets. Instead, structure information using clear spacing.
 
 Current Page: "${document.title}"
 URL: ${window.location.href}
@@ -759,7 +745,12 @@ ${pageContent}
       // Bug #5 Fix: Only send the last MAX_CONTEXT_MESSAGES messages to the LLM.
       // This prevents token explosion on long conversations and avoids sending
       // all stored screenshots (which are already stripped from persistence).
-      const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES);
+      const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES).map((msg, idx, arr) => {
+        // Keep the image ONLY if it's the very last message in the history
+        if (idx === arr.length - 1) return { ...msg };
+        if (msg.image) return { ...msg, image: null, content: msg.content + "\n*(Previous image omitted to save quota)*" };
+        return { ...msg };
+      });
       const messages = [{ role: 'system', content: systemPrompt }, ...contextHistory];
 
       const res = await sendMsg({ type: T.LLM_REQUEST, payload: { provider: selectedProvider, model: selectedModel, messages } });
@@ -777,9 +768,7 @@ ${pageContent}
       renderMessages();
       setTimeout(() => scrollToNewAssistantMessage(), 30);
     } finally {
-      isLoading = false;
-      if (btn) btn.disabled = false;
-      if (input) input.disabled = false;
+      setLoading(false);
     }
   }
 
@@ -839,15 +828,6 @@ ${pageContent}
     return finalContent.slice(0, 7000);
   }
 
-  function hasAnyKey() {
-    return !!(
-      (apiKeys.google && apiKeys.google.trim()) ||
-      (apiKeys.groq && apiKeys.groq.trim()) ||
-      (apiKeys.openai && apiKeys.openai.trim()) ||
-      (apiKeys.customUrl && apiKeys.customUrl.trim())
-    );
-  }
-
   // ── UI Helpers ─────────────────────────────────────────────────
   function q(selector) { return panel.querySelector(selector); }
   function show(el) { if (el) el.classList.add('ns-show'); }
@@ -862,31 +842,13 @@ ${pageContent}
 
     hide(signInScreen); hide(chatScreen); hide(settingsScreen); hide(toolbar);
 
-    const isGuest = authState.token === 'local-only';
-    const noKeys = !hasAnyKey();
-    const isLocked = isGuest && noKeys;
-
     if (!authState.signedIn) {
       show(signInScreen);
     } else if (currentView === 'settings') {
       show(toolbar); show(settingsScreen); populateSettingsUser();
     } else {
       show(toolbar); show(chatScreen);
-      chatScreen.classList.toggle('nagasai-chat-screen--locked', isLocked);
-
-      if (isLocked) {
-        let lockedMsg = q('#nagasai-locked-message');
-        if (!lockedMsg) {
-          lockedMsg = document.createElement('div');
-          lockedMsg.id = 'nagasai-locked-message';
-          lockedMsg.innerHTML = `
-            <div style="font-size:40px; margin-bottom:20px; opacity:0.5;">🔒</div>
-            <p style="font-size:14px; line-height:1.6;">Add an api key in settings page to use nagasai extension</p>`;
-          chatScreen.appendChild(lockedMsg);
-        }
-      } else {
-        renderProviderSelect(); renderMessages();
-      }
+      renderProviderSelect(); renderMessages();
     }
 
     if (authState.signedIn && authState.user) {
@@ -907,12 +869,14 @@ ${pageContent}
     const kGoogle = q('#nagasai-key-google');
     const kGroq = q('#nagasai-key-groq');
     const kOpenAI = q('#nagasai-key-openai');
+    const kCohere = q('#nagasai-key-cohere');
     const kCustom = q('#nagasai-key-custom');
     const kCustomUrl = q('#nagasai-key-customurl');
     const kCustomModel = q('#nagasai-key-custommodel');
     if (kGoogle) kGoogle.value = apiKeys.google || '';
     if (kGroq) kGroq.value = apiKeys.groq || '';
     if (kOpenAI) kOpenAI.value = apiKeys.openai || '';
+    if (kCohere) kCohere.value = apiKeys.cohere || '';
     if (kCustom) kCustom.value = apiKeys.customKey || '';
     if (kCustomUrl) kCustomUrl.value = apiKeys.customUrl || '';
     if (kCustomModel) kCustomModel.value = apiKeys.customModel || '';
@@ -923,12 +887,10 @@ ${pageContent}
   function renderProviderSelect() {
     const sel = q('#nagasai-provider-select');
     if (!sel) return;
-    const isGuest = authState.token === 'local-only';
     const activeProviders = Object.entries(PROVIDERS).filter(([pId, p]) => {
-      if (isGuest && pId === 'pollinations') return false; // Fix: Hide Free AI for guest mode
       if (!p.requiresKey) return true;
       if (pId === 'custom') return !!(apiKeys.customUrl && apiKeys.customUrl.trim());
-      return !!(apiKeys[pId] && apiKeys[pId].trim() !== '');
+      return !!(apiKeys[pId] && apiKeys[pId].trim());
     });
     if (!activeProviders.find(([pId]) => pId === selectedProvider)) {
       selectedProvider = activeProviders.length > 0 ? activeProviders[0][0] : 'pollinations';
@@ -1037,6 +999,10 @@ ${pageContent}
   }
   function onDrag(e) {
     if (!isDragging) return;
+    if (e.buttons === 0) {
+      stopDrag();
+      return;
+    }
     panel.style.left = `${e.clientX - dragOffsetX}px`;
     panel.style.top = `${e.clientY - dragOffsetY}px`;
     panel.style.right = 'auto';

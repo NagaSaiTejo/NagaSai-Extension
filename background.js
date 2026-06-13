@@ -148,9 +148,9 @@ async function getAuthState(sendResponse) {
 async function getApiKeys(sendResponse) {
   try {
     const data = await chrome.storage.sync.get(K.API_KEYS);
-    sendResponse({ keys: data[K.API_KEYS] || { google: '', groq: '', openai: '', customKey: '', customUrl: '', customModel: '' } });
+    sendResponse({ keys: data[K.API_KEYS] || { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' } });
   } catch (_) {
-    sendResponse({ keys: { google: '', groq: '', openai: '', customKey: '', customUrl: '', customModel: '' } });
+    sendResponse({ keys: { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' } });
   }
 }
 
