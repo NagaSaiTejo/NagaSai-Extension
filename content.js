@@ -20,6 +20,8 @@
     SIDEPANEL_STATE: '_rb',
     OPEN_FLOATING: '_rc',
     TOGGLE_STEALTH: '_rd',
+    START_GENERATION: 'START_GENERATION',
+    STOP_GENERATION: 'STOP_GENERATION',
   };
 
   // ── Obfuscated storage keys (must match background.js) ─────────
@@ -42,7 +44,7 @@
   let panelOpen = false;
   let currentView = 'chat';
   let authState = { signedIn: false, user: null, token: null };
-  let apiKeys = { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' };
+  let apiKeys = { google: '', groq: '', openai: '', anthropic: '', openrouter: '', customKey: '', customUrl: '', customModel: '' };
   let chatHistory = [];
   let selectedProvider = 'pollinations';
   let selectedModel = 'openai';
@@ -50,10 +52,11 @@
   let isDragging = false;
   let dragOffsetX = 0, dragOffsetY = 0;
   let attachedScreenshotUrl = null;
-  let isToggleDragging = false;
-  let toggleHasMoved = false;
+  let currentPort = null;
   let toggleDragOffsetX = 0, toggleDragOffsetY = 0;
   let lastMouseX = 0, lastMouseY = 0;
+  let isToggleDragging = false;
+  let toggleHasMoved = false;
 
   // Stealth mode: hides all extension UI during screen sharing
   let isStealth = false;
@@ -146,23 +149,10 @@
   // ── Toggle button lives in main DOM with random ID + inline style
   const toggleBtn = document.createElement('div');
   // Adaptive color: dim dark letter on light pages, dim white letter on dark pages
-  function getAdaptiveColor() {
-    const bg = window.getComputedStyle(document.body).backgroundColor;
-    const m = bg.match(/rgba?\((\d+),(\d+),(\d+)/);
-    if (m) {
-      const lum = (parseInt(m[1]) * 299 + parseInt(m[2]) * 587 + parseInt(m[3]) * 114) / 1000;
-      return lum > 128 ? { c: '#000', o: '0.25' } : { c: '#fff', o: '0.35' };
-    }
-    return { c: '#000', o: '0.25' };
-  }
-
   toggleBtn.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;"><span id="__pr_s_letter__" style="font-family:Georgia,'Times New Roman',serif;font-size:17px;font-weight:700;font-style:italic;line-height:1;transition:opacity 0.2s ease;">S</span></div>`;
   toggleBtn.id = id('_tb');
 
   function applyToggleStyle(el, active) {
-    const theme = getAdaptiveColor();
-    const op = active ? '0.6' : theme.o;
-
     el.style.cssText = [
       'position:fixed !important',
       'bottom:07px !important',
@@ -180,15 +170,16 @@
       'user-select:none !important',
       'box-sizing:border-box !important',
       'cursor:pointer !important',
-      'opacity:' + (uiRevealed ? (active ? '1' : '0.4') : '0') + ' !important',
+      'opacity:' + (uiRevealed ? (active ? '1' : '0.6') : '0') + ' !important',
       'pointer-events:' + (uiRevealed ? 'auto' : 'none') + ' !important',
       'transition:opacity 0.4s ease, transform 0.2s ease !important',
     ].join(';');
 
     const letter = el.querySelector('#__pr_s_letter__');
     if (letter) {
-      letter.style.color = theme.c;
-      letter.style.opacity = op;
+      letter.style.color = '#ffffff';
+      if (active) letter.style.textShadow = '0 0 8px rgba(0,0,0,0.9), 0 0 2px rgba(255,255,255,0.5)';
+      else letter.style.textShadow = '0 1px 4px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.6)';
     }
   }
 
@@ -203,9 +194,13 @@
   panelRoot.id = 'nagasai-root';
 
   // Apply saved theme to panelRoot (which #nagasai-root.ns-dark/light-theme targets)
-  const storedTheme = localStorage.getItem('_xt');
+  const storedTheme = localStorage.getItem('_xt') || 'dark'; // Default dark theme like desktop
   if (storedTheme === 'light') panelRoot.classList.add('ns-light-theme');
-  else if (storedTheme === 'dark') panelRoot.classList.add('ns-dark-theme');
+  else panelRoot.classList.add('ns-dark-theme');
+
+  // Apply saved opacity
+  const storedOpacity = localStorage.getItem('_xo') || '1';
+  panelRoot.style.opacity = storedOpacity;
 
   panelRoot.innerHTML = window.NagaSaiShared.buildPanelHTML(false);
   shadowRoot.appendChild(panelRoot);
@@ -242,7 +237,10 @@
   // PREFERRED_MODE is only used to remember WHICH mode to use when the
   // user clicks the 'S' button — NOT to auto-open it on navigation.
   chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE], (data) => {
-    if (data[K.CHAT_HISTORY]) chatHistory = data[K.CHAT_HISTORY];
+    if (data[K.CHAT_HISTORY]) {
+      chatHistory = data[K.CHAT_HISTORY];
+      if (currentView === 'chat') renderMessages();
+    }
     // Panel always starts closed on page load — user must click to open.
   });
 
@@ -479,6 +477,17 @@
       applyToggleStyle(toggleBtn, panelOpen);
     });
 
+    const opacitySlider = panel.querySelector('#nagasai-pref-opacity');
+    if (opacitySlider) {
+      opacitySlider.value = localStorage.getItem('_xo') || '1';
+      opacitySlider.addEventListener('input', (e) => {
+        panelRoot.style.opacity = e.target.value;
+      });
+      opacitySlider.addEventListener('change', (e) => {
+        localStorage.setItem('_xo', e.target.value);
+      });
+    }
+
     q('#nagasai-settings-btn').addEventListener('click', () => {
       currentView = currentView === 'settings' ? 'chat' : 'settings';
       renderView();
@@ -496,10 +505,18 @@
     }
 
     panel.addEventListener('click', async (e) => {
-      if (e.target.closest('#nagasai-signin-btn')) handleSignIn();
-      if (e.target.closest('#nagasai-signout-btn')) handleSignOut();
-      if (e.target.closest('#nagasai-send-btn')) sendUserMessage();
+      if (e.target.closest('#nagasai-send-btn')) {
+        if (isLoading) {
+          if (currentPort) {
+            currentPort.postMessage({ type: T.STOP_GENERATION });
+            currentPort = null;
+          }
+          return;
+        }
+        sendUserMessage();
+      }
       if (e.target.closest('#nagasai-save-keys-btn')) saveApiKeys();
+      if (e.target.closest('#nagasai-export-btn')) exportChatToHtml();
 
       if (e.target.closest('#nagasai-screenshot-btn')) {
         e.preventDefault();
@@ -576,33 +593,44 @@
     document.addEventListener('mouseup', stopDrag);
   }
 
-  // ── Sign In / Out ──────────────────────────────────────────────
-  async function handleSignIn() {
-    const btn = q('#nagasai-signin-btn');
-    const errEl = q('#nagasai-signin-error');
-    if (btn) { btn.textContent = 'Opening Google…'; btn.disabled = true; }
-    if (errEl) errEl.textContent = '';
-
-    const res = await Promise.race([
-      sendMsg({ type: T.SIGN_IN }),
-      new Promise(resolve => setTimeout(() => resolve({ success: false, error: 'Sign-in timed out. Reload extension and try again.' }), 15000))
-    ]);
-
-    if (res && res.success) {
-      authState = { signedIn: true, user: res.user, token: res.token };
-      renderView();
-    } else {
-      if (btn) { btn.innerHTML = googleBtnContent(); btn.disabled = false; }
-      if (errEl) errEl.textContent = res?.error || 'Sign-in failed.';
-    }
-  }
-
-  async function handleSignOut() {
-    await sendMsg({ type: T.SIGN_OUT });
-    authState = { signedIn: false, user: null, token: null };
-    chatHistory = [];
-    currentView = 'chat';
-    renderView();
+  // ── Export Chat ──────────────────────────────────────────────
+  function exportChatToHtml() {
+    if (chatHistory.length === 0) return;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    let htmlContent = `
+    <html>
+      <head>
+        <title>NagaSai AI Export - ${timestamp}</title>
+        <style>
+          body { font-family: sans-serif; background: #161616; color: #eaeaea; padding: 20px; }
+          .msg { margin-bottom: 20px; padding: 15px; border-radius: 8px; max-width: 800px; margin-left: auto; margin-right: auto; }
+          .user { background: #2a2a2a; }
+          .assistant { background: #1f1f1f; border-left: 4px solid #1dba8a; }
+          .role { font-weight: bold; margin-bottom: 10px; color: #1dba8a; }
+          .user .role { color: #888; }
+          pre { background: #000; padding: 10px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
+          code { font-family: monospace; }
+        </style>
+      </head>
+      <body>
+        <h2 style="text-align: center;">NagaSai AI Chat Export</h2>
+    `;
+    
+    chatHistory.forEach((msg) => {
+      const roleLabel = msg.role === 'user' ? 'You' : 'NagaSai AI';
+      let content = (msg.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>');
+      htmlContent += `\n<div class="msg ${msg.role}">\n  <div class="role">${roleLabel}</div>\n  <div class="content"><pre>${content}</pre></div>\n</div>`;
+    });
+    
+    htmlContent += '\n</body>\n</html>';
+    
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `NagaSai_Export_${timestamp}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ── API Keys (Bug #3 Fix: save ALL key fields including custom) ─
@@ -620,7 +648,8 @@
       google: q('#nagasai-key-google')?.value.trim() ?? apiKeys.google ?? '',
       groq: q('#nagasai-key-groq')?.value.trim() ?? apiKeys.groq ?? '',
       openai: q('#nagasai-key-openai')?.value.trim() ?? apiKeys.openai ?? '',
-      cohere: q('#nagasai-key-cohere')?.value.trim() ?? apiKeys.cohere ?? '',
+      anthropic: q('#nagasai-key-anthropic')?.value.trim() ?? apiKeys.anthropic ?? '',
+      openrouter: q('#nagasai-key-openrouter')?.value.trim() ?? apiKeys.openrouter ?? '',
       // Bug #3 Fix: preserve custom provider fields instead of wiping them
       customKey: q('#nagasai-key-custom')?.value.trim() ?? apiKeys.customKey ?? '',
       customUrl: q('#nagasai-key-customurl')?.value.trim() ?? apiKeys.customUrl ?? '',
@@ -661,12 +690,12 @@
     // before any awaits. This is the only reliable guard against rapid
     // double-tap / race conditions.
     if (isLoading) return;
-    isLoading = true;
+    setLoading(true);
 
     const input = q('#nagasai-input');
     const text = input?.value.trim() || '';
     if (!text && !attachedScreenshotUrl) {
-      isLoading = false;
+      setLoading(false);
       return;
     }
 
@@ -683,16 +712,10 @@
     // A single base64 JPEG can be 100-300KB; 30 of them would hit the 10MB limit.
     saveChatHistory();
 
-    const btn = q('#nagasai-send-btn');
-    if (btn) btn.disabled = true;
-    if (input) input.disabled = true;
-
     try { renderMessages(); } catch (e) {
       chatHistory.push({ role: 'assistant', content: `⚠️ Render Error: ${e.message}` });
       renderMessages();
-      isLoading = false;
-      if (btn) btn.disabled = false;
-      if (input) input.disabled = false;
+      setLoading(false);
       return;
     }
 
@@ -700,41 +723,15 @@
 
     try {
       const pageContent = extractPageContent() || 'No content found.';
-      const systemPrompt = `You are a powerful agentic AI coding assistant. You are pair programming with a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question. The USER will send you requests, which you must always prioritize addressing.
+      const systemPrompt = `You are NagaSai AI, a friendly, intelligent, and conversational browser assistant.
 
-2. Communication Style & Formatting
-Keep your responses concise and highly human-like.
-Write in clean, easy-to-read plain text.
-DO NOT use complex Markdown features such as blockquotes (e.g. >), alert blocks (e.g. [!NOTE]), markdown tables, or markdown headers (e.g. #). Instead, write headers as bold text or simple capital letters.
-Do not use markdown lists (like - or *). Use clean circles (•) or numbers for listing points.
-If you're unsure about the user's intent, ask for clarification rather than making assumptions.
-You can use bold text (**bold**) and code blocks (with \`\`\`) when presenting code, but keep all other text completely clean and devoid of special formatting symbols.
-Maintain documentation integrity. Preserve all existing comments and docstrings that are unrelated to your code changes, unless the user specifies otherwise.
+Instructions:
+1. VERY IMPORTANT: Keep your responses EXTREMELY short and concise, exactly like a natural human chat (e.g., 1-2 sentences). Do NOT write long essays unless explicitly asked to explain in detail.
+2. If the user asks a simple question or makes casual conversation, reply briefly. Do NOT summarize or mention the page content unless the user specifically asks about it.
+3. ONLY analyze the "PAGE CONTENT" below if the user's prompt directly references the page, the website, or the text on the screen.
+4. Keep formatting clean and easy to read. Use bold text for emphasis and bullet points only when necessary.
 
-3. Planning and Workflow (Agentic Behavior)
-When to Plan: Stop and create a plan if the user's request requires major architectural changes, extensive research, significant decision making, or a significant deviation from an existing plan.
-
-Workflow:
-- Thoroughly research the task first.
-- Create an implementation plan and present it to the user.
-- Include any open questions or design decisions directly in the plan.
-- STOP and wait for the user's explicit approval before proceeding to execution.
-- Once approved, execute the plan and track progress.
-- Verify that changes have the desired effects and create a walkthrough summarizing the work.
-
-When NOT to plan: Do not create a plan or block the user if the request is investigatory in nature (e.g., "explain how X works"), trivially simple, or a minor follow-up to an existing plan.
-
-4. Design and Aesthetics (For Web Development)
-Use Rich Aesthetics: The USER should be wowed at first glance by the design. Use best practices in modern web design (e.g., vibrant colors, dark modes, glassmorphism, dynamic animations) to create a stunning first impression.
-Prioritize Visual Excellence: Avoid generic colors. Use curated, harmonious color palettes and modern typography. Add subtle micro-animations for an enhanced user experience.
-Dynamic Design: An interface that feels responsive and alive encourages interaction. Achieve this with hover effects and interactive elements.
-Premium Feel: Make a design that feels premium and state-of-the-art. Avoid creating simple minimum viable products.
-
-5. Documenting and Presenting Information
-Always present information in clear, clean, paragraph-style descriptions or plain bullet lists.
-DO NOT format tables or lists with raw pipe characters (|) or brackets. Instead, structure information using clear spacing.
-
-Current Page: "${document.title}"
+Current Page Title: "${document.title}"
 URL: ${window.location.href}
 
 === PAGE CONTENT ===
@@ -753,21 +750,93 @@ ${pageContent}
       });
       const messages = [{ role: 'system', content: systemPrompt }, ...contextHistory];
 
-      const res = await sendMsg({ type: T.LLM_REQUEST, payload: { provider: selectedProvider, model: selectedModel, messages } });
+      // Smart Fallback Chain
+      const fallbackChain = [
+        { provider: selectedProvider, model: selectedModel, label: 'Selected AI' },
+        { provider: 'google', model: 'gemini-3.6-flash', label: 'Gemini', available: !!apiKeys.google?.trim() },
+        { provider: 'groq', model: 'llama-3.3-70b-versatile', label: 'Groq', available: !!apiKeys.groq?.trim() },
+        { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free', available: !!apiKeys.openrouter?.trim() },
+        { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', label: 'Claude Haiku', available: !!apiKeys.anthropic?.trim() },
+        { provider: 'pollinations', model: 'openai', label: 'Free AI (No Key)', available: true }
+      ].filter((item, index, self) => 
+        (index === 0 || item.available) && 
+        (index === 0 || !self.slice(0, index).some(x => x.provider === item.provider && x.model === item.model))
+      );
 
-      chatHistory.push({
-        role: 'assistant',
-        content: res?.success ? res.response : `⚠️ **Error**: ${res?.error || 'No response from AI. Check your internet connection or API key.'}`
-      });
-      saveChatHistory();
+      const assistantMsgIdx = chatHistory.length;
+      chatHistory.push({ role: 'assistant', content: 'Generating...' });
       renderMessages();
       setTimeout(() => scrollToNewAssistantMessage(), 30);
-    } catch (err) {
-      chatHistory.push({ role: 'assistant', content: `⚠️ **Exception**: ${err.message || 'Unknown error. Check your API key in Settings.'}` });
-      saveChatHistory();
-      renderMessages();
-      setTimeout(() => scrollToNewAssistantMessage(), 30);
-    } finally {
+
+      let fullResponse = '';
+      let lastError = null;
+
+      for (let i = 0; i < fallbackChain.length; i++) {
+        const attempt = fallbackChain[i];
+
+        if (i > 0) {
+          const errorMsg = lastError ? lastError.message : 'Unknown error';
+          chatHistory.push({
+            role: 'assistant',
+            content: `⚠️ **${fallbackChain[i-1].label} API Error:** ${errorMsg}\n\nSwitching to ${attempt.label}...`
+          });
+          renderMessages();
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        try {
+          await new Promise((resolve, reject) => {
+            currentPort = chrome.runtime.connect({ name: 'llm_stream' });
+            currentPort.postMessage({ type: T.START_GENERATION, payload: { provider: attempt.provider, model: attempt.model, messages } });
+
+            currentPort.onMessage.addListener((msg) => {
+              if (msg.type === 'CHUNK') {
+                fullResponse = msg.accumulated;
+                chatHistory[chatHistory.length - 1].content = msg.accumulated;
+                renderMessages();
+              } else if (msg.type === 'DONE') {
+                fullResponse = msg.response;
+                chatHistory[chatHistory.length - 1].content = msg.response;
+                saveChatHistory();
+                renderMessages();
+                currentPort = null;
+                resolve();
+              } else if (msg.type === 'ERROR') {
+                currentPort = null;
+                reject(new Error(msg.error));
+              }
+            });
+            
+            // Handle disconnect if background script crashes
+            currentPort.onDisconnect.addListener(() => {
+              if (currentPort) {
+                currentPort = null;
+                reject(new Error('Extension background script disconnected unexpectedly.'));
+              }
+            });
+          });
+          
+          if (fullResponse) break; // Success!
+
+        } catch (err) {
+          lastError = err;
+          console.warn(`[NagaSai] Provider "${attempt.provider}" failed: ${err.message}`);
+          
+          // If aborted by user, stop chain
+          if (err.message.includes('Generation stopped by user') || err.message.includes('aborted')) {
+            break;
+          }
+        }
+      }
+
+      setLoading(false);
+      if (!fullResponse) {
+        chatHistory.push({ role: 'assistant', content: `⚠️ **Exception**: ${lastError?.message || 'Unknown error. Check your API key in Settings.'}` });
+        saveChatHistory();
+        renderMessages();
+        setTimeout(() => scrollToNewAssistantMessage(), 30);
+      }
+    } catch (e) {
       setLoading(false);
     }
   }
@@ -834,49 +903,36 @@ ${pageContent}
   function hide(el) { if (el) el.classList.remove('ns-show'); }
 
   function renderView() {
-    const signInScreen = q('#nagasai-signin-screen');
     const chatScreen = q('#nagasai-chat-screen');
     const settingsScreen = q('#nagasai-settings-screen');
     const toolbar = q('#nagasai-toolbar');
-    if (!signInScreen) return;
+    
+    if (!chatScreen) return;
 
-    hide(signInScreen); hide(chatScreen); hide(settingsScreen); hide(toolbar);
+    hide(chatScreen); hide(settingsScreen); hide(toolbar);
 
-    if (!authState.signedIn) {
-      show(signInScreen);
-    } else if (currentView === 'settings') {
-      show(toolbar); show(settingsScreen); populateSettingsUser();
+    if (currentView === 'settings') {
+      show(settingsScreen); populateSettingsUser();
     } else {
-      show(toolbar); show(chatScreen);
+      show(chatScreen);
       renderProviderSelect(); renderMessages();
-    }
-
-    if (authState.signedIn && authState.user) {
-      const nameEl = q('#nagasai-username');
-      const avatarEl = q('#nagasai-avatar');
-      if (nameEl) nameEl.textContent = authState.user.given_name || authState.user.name || 'User';
-      if (avatarEl && authState.user.picture) { avatarEl.src = authState.user.picture; avatarEl.classList.add('ns-show'); }
     }
   }
 
   function populateSettingsUser() {
-    const u = authState.user;
-    const el = q('#nagasai-settings-user');
-    if (el && u) {
-      el.innerHTML = `<img src="${u.picture || ''}" alt="" class="nagasai-settings-avatar"/>
-      <div><div class="nagasai-settings-name">${u.name || ''}</div><div class="nagasai-settings-email">${u.email || ''}</div></div>`;
-    }
     const kGoogle = q('#nagasai-key-google');
     const kGroq = q('#nagasai-key-groq');
     const kOpenAI = q('#nagasai-key-openai');
-    const kCohere = q('#nagasai-key-cohere');
+    const kAnthropic = q('#nagasai-key-anthropic');
+    const kOpenRouter = q('#nagasai-key-openrouter');
     const kCustom = q('#nagasai-key-custom');
     const kCustomUrl = q('#nagasai-key-customurl');
     const kCustomModel = q('#nagasai-key-custommodel');
     if (kGoogle) kGoogle.value = apiKeys.google || '';
     if (kGroq) kGroq.value = apiKeys.groq || '';
     if (kOpenAI) kOpenAI.value = apiKeys.openai || '';
-    if (kCohere) kCohere.value = apiKeys.cohere || '';
+    if (kAnthropic) kAnthropic.value = apiKeys.anthropic || '';
+    if (kOpenRouter) kOpenRouter.value = apiKeys.openrouter || '';
     if (kCustom) kCustom.value = apiKeys.customKey || '';
     if (kCustomUrl) kCustomUrl.value = apiKeys.customUrl || '';
     if (kCustomModel) kCustomModel.value = apiKeys.customModel || '';
@@ -978,13 +1034,22 @@ ${pageContent}
 
 
 
-  function setLoading(state) {
-    isLoading = state;
-    const btn = q('#nagasai-send-btn');
+  function setLoading(isLoad) {
+    isLoading = isLoad;
+    const sendBtn = q('#nagasai-send-btn');
     const input = q('#nagasai-input');
-    if (btn) btn.disabled = state;
-    if (input) input.disabled = state;
-    renderMessages();
+    if (isLoad) {
+      if (sendBtn) {
+        sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>';
+        sendBtn.style.color = '#ff4a4a';
+      }
+    } else {
+      if (sendBtn) {
+        sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+        sendBtn.style.color = '';
+      }
+    }
+    if (input) input.disabled = isLoad;
   }
 
   // ── Drag ───────────────────────────────────────────────────────

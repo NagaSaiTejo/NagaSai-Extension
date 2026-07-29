@@ -10,19 +10,18 @@ const T = {
   SAVE_API_KEYS: '_r5',
   LLM_REQUEST: '_r6',
   CAPTURE_SCREENSHOT: '_r7',
-  OPEN_SIDEPANEL: '_r8',
-  GET_SIDEPANEL_STATE: '_r9',
+  OPEN_SIDEPANEL: '_r10',
+  GET_SIDEPANEL_STATE: '_r11',
   PULL_PAGE_CONTENT: '_ra',
   SIDEPANEL_STATE: '_rb',
   OPEN_FLOATING: '_rc',
   TOGGLE_STEALTH: '_rd',   // stealth mode: hide/show all extension UI
+  START_GENERATION: 'START_GENERATION',
+  STOP_GENERATION: 'STOP_GENERATION',
 };
 
-// ── Obfuscated storage keys (must match content.js) ──────────────
 const K = {
   USER: '_s1',
-  TOKEN: '_s2',
-  SIGNED_IN: '_s3',
   API_KEYS: '_s4',
 };
 
@@ -61,8 +60,8 @@ function broadcastSidePanelState(isOpen) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type } = message;
 
-  if (type === T.SIGN_IN) { handleSignIn(sendResponse); return true; }
-  if (type === T.SIGN_OUT) { handleSignOut(sendResponse); return true; }
+  if (type === T.SIGN_IN) { sendResponse({ success: true, user: { name: 'User' }, token: 'free-mode' }); return true; }
+  if (type === T.SIGN_OUT) { sendResponse({ success: true }); return true; }
   if (type === T.GET_AUTH_STATE) { getAuthState(sendResponse); return true; }
   if (type === T.GET_API_KEYS) { getApiKeys(sendResponse); return true; }
   if (type === T.SAVE_API_KEYS) { saveApiKeys(message.payload, sendResponse); return true; }
@@ -81,127 +80,65 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ── Google Sign-In ────────────────────────────────────────────────
-async function handleSignIn(sendResponse) {
-  try {
-    await clearAllCachedTokens();
-    const token = await getGoogleToken(true);
-    if (!token) throw new Error('No token received.');
-
-    const userInfo = await fetchUserInfo(token);
-
-    await chrome.storage.sync.set({
-      [K.USER]: userInfo,
-      [K.TOKEN]: token,
-      [K.SIGNED_IN]: true
-    });
-
-    sendResponse({ success: true, user: userInfo, token });
-  } catch (err) {
-    sendResponse({ success: false, error: err.message || 'Sign-in failed. Please try again.' });
-  }
-}
-
-async function handleSignOut(sendResponse) {
-  try {
-    const data = await chrome.storage.sync.get(K.TOKEN);
-    if (data[K.TOKEN]) await revokeToken(data[K.TOKEN]);
-    await chrome.storage.sync.remove([K.USER, K.TOKEN, K.SIGNED_IN]);
-    sendResponse({ success: true });
-  } catch (err) {
-    sendResponse({ success: false, error: err.message });
-  }
-}
-
-// Bug #14 Fix: Silently refresh the OAuth token on every auth state check.
-// Google OAuth tokens expire in ~1 hour. This keeps the stored token fresh
-// without requiring the user to sign in again.
+// ── Auth State (Always Free/Signed In) ────────────────────────────
 async function getAuthState(sendResponse) {
-  try {
-    const data = await chrome.storage.sync.get([K.USER, K.SIGNED_IN, K.TOKEN]);
-
-    if (data[K.SIGNED_IN] && data[K.USER]) {
-      // Attempt a silent (non-interactive) token refresh.
-      try {
-        const freshToken = await getGoogleToken(false);
-        if (freshToken && freshToken !== data[K.TOKEN]) {
-          await chrome.storage.sync.set({ [K.TOKEN]: freshToken });
-          data[K.TOKEN] = freshToken;
-        }
-      } catch (_) {
-        // Silent refresh failed — user may need to re-sign in eventually.
-        // We still return the cached auth state so the extension keeps working.
-      }
-    }
-
-    sendResponse({
-      signedIn: !!data[K.SIGNED_IN],
-      user: data[K.USER] || null,
-      token: data[K.TOKEN] || null
-    });
-  } catch (_) {
-    sendResponse({ signedIn: false, user: null, token: null });
-  }
+  sendResponse({
+    signedIn: true,
+    user: { name: 'User', picture: '' },
+    token: 'free-mode'
+  });
 }
 
 // ── API Keys ──────────────────────────────────────────────────────
+function maskKey(key) {
+  if (!key) return '';
+  return key.slice(0, 4) + '****' + key.slice(-4);
+}
+
 async function getApiKeys(sendResponse) {
   try {
     const data = await chrome.storage.sync.get(K.API_KEYS);
-    sendResponse({ keys: data[K.API_KEYS] || { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' } });
+    const realKeys = data[K.API_KEYS] || {};
+    const maskedKeys = {
+      google: maskKey(realKeys.google),
+      groq: maskKey(realKeys.groq),
+      openai: maskKey(realKeys.openai),
+      anthropic: maskKey(realKeys.anthropic),
+      openrouter: maskKey(realKeys.openrouter),
+      customKey: maskKey(realKeys.customKey),
+      customUrl: realKeys.customUrl || '',
+      customModel: realKeys.customModel || ''
+    };
+    sendResponse({ keys: maskedKeys });
   } catch (_) {
-    sendResponse({ keys: { google: '', groq: '', openai: '', cohere: '', customKey: '', customUrl: '', customModel: '' } });
+    sendResponse({ keys: {} });
   }
 }
 
-async function saveApiKeys(keys, sendResponse) {
+async function saveApiKeys(newKeys, sendResponse) {
   try {
-    await chrome.storage.sync.set({ [K.API_KEYS]: keys });
+    const data = await chrome.storage.sync.get(K.API_KEYS);
+    const existingKeys = data[K.API_KEYS] || {};
+    
+    // Only update keys that do not contain the mask '****'
+    const finalKeys = { ...existingKeys };
+    for (const [k, v] of Object.entries(newKeys)) {
+      if (v && v.includes('****')) {
+        continue; // retain existing key
+      }
+      finalKeys[k] = v;
+    }
+
+    await chrome.storage.sync.set({ [K.API_KEYS]: finalKeys });
     sendResponse({ success: true });
   } catch (err) {
     sendResponse({ success: false, error: err.message });
   }
 }
 
-// ── Google OAuth Token ────────────────────────────────────────────
-function getGoogleToken(interactive = false) {
-  return new Promise((resolve, reject) => {
-    if (!chrome.identity) {
-      reject(new Error('Google Identity API is not available in this browser. Please use the "Not google browser" option.'));
-      return;
-    }
-    chrome.identity.getAuthToken({ interactive }, (token) => {
-      if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-      else if (!token) reject(new Error('No token returned.'));
-      else resolve(token);
-    });
-  });
-}
+let activeControllers = new Map(); // Port -> AbortController
 
-function clearAllCachedTokens() {
-  return new Promise((resolve) => {
-    if (chrome.identity.clearAllCachedAuthTokens) chrome.identity.clearAllCachedAuthTokens(resolve);
-    else resolve();
-  });
-}
-
-async function fetchUserInfo(token) {
-  const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  if (!res.ok) {
-    await new Promise(r => chrome.identity.removeCachedAuthToken({ token }, r));
-    throw new Error(`Auth error: ${res.status}`);
-  }
-  return res.json();
-}
-
-async function revokeToken(token) {
-  await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`).catch(() => { });
-  return new Promise((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve));
-}
-
-// ── LLM Request ───────────────────────────────────────────────────
+// Handle LLM Requests via one-off messages (non-streaming legacy fallback if needed)
 async function handleLLMRequest(payload, sendResponse) {
   try {
     const { provider, model, messages } = payload;
@@ -213,6 +150,63 @@ async function handleLLMRequest(payload, sendResponse) {
     sendResponse({ success: false, error: err.message });
   }
 }
+
+// Handle LLM Requests via Ports (Streaming)
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'llm_stream') return;
+
+  port.onMessage.addListener(async (msg) => {
+    if (msg.type === T.STOP_GENERATION) {
+      const controller = activeControllers.get(port);
+      if (controller) {
+        controller.abort();
+        activeControllers.delete(port);
+      }
+      return;
+    }
+
+    if (msg.type === T.START_GENERATION) {
+      const { provider, model, messages } = msg.payload;
+      const controller = new AbortController();
+      activeControllers.set(port, controller);
+
+      try {
+        const data = await chrome.storage.sync.get(K.API_KEYS);
+        const apiKeys = data[K.API_KEYS] || {};
+
+        const response = await callLLM({
+          provider,
+          model,
+          messages,
+          apiKeys,
+          signal: controller.signal,
+          onChunk: (chunk, accumulated) => {
+            port.postMessage({ type: 'CHUNK', chunk, accumulated });
+          }
+        });
+
+        port.postMessage({ type: 'DONE', response });
+      } catch (err) {
+        if (err.name === 'AbortError' || err.message?.includes('user aborted')) {
+          port.postMessage({ type: 'ERROR', error: 'Generation stopped by user.' });
+        } else {
+          port.postMessage({ type: 'ERROR', error: err.message });
+        }
+      } finally {
+        activeControllers.delete(port);
+      }
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    const controller = activeControllers.get(port);
+    if (controller) {
+      controller.abort();
+      activeControllers.delete(port);
+    }
+  });
+});
+
 
 // ── Screenshot ────────────────────────────────────────────────────
 // Bug #9 improvement: pass sender so we capture the correct tab's window.

@@ -32,29 +32,20 @@
     }
   ],
   "permissions": [
-    "identity",
     "storage",
     "activeTab",
     "scripting",
     "sidePanel",
-    "tabs"
+    "tabs",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>",
     "https://text.pollinations.ai/*",
     "https://gen.pollinations.ai/*",
-    "https://www.googleapis.com/*",
-    "https://accounts.google.com/*",
     "https://api.anthropic.com/*",
     "https://openrouter.ai/*"
   ],
-  "oauth2": {
-    "client_id": "814686278793-bodg7tep4a9oh16e63j9s9gc9grosc2e.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile"
-    ]
-  },
   "web_accessible_resources": [
     {
       "resources": [

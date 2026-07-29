@@ -3,29 +3,39 @@
 window.NagaSaiShared = {
   PROVIDERS: {
     pollinations: {
-      label: 'Free AI', badge: 'No Key',
+      label: 'Free AI (No Key)',
+      badge: 'Free',
       models: [['openai', '⚡ GPT-4o Mini (Free)']]
     },
     google: {
-      label: 'Google Gemini', badge: 'API Key', requiresKey: true,
+      label: 'Google Gemini',
+      badge: 'API Key',
+      requiresKey: true,
       models: [
-        ['gemini-2.5-flash', 'Gemini 2.5 Flash'],
-        ['gemini-2.0-pro-exp-02-05', 'Gemini 2.0 Pro Exp'],
-        ['gemini-1.5-pro', 'Gemini 1.5 Pro']
+        ['gemini-3.6-flash', '⚡ Gemini 3.6 Flash (Fastest)'],
+        ['gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite'],
+        ['gemini-2.5-flash', 'Gemini 2.5 Flash(Old key users)'],
+        ['gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite'],
+        ['gemini-flash-latest', 'Gemini Flash Latest'],
+        ['gemini-flash-lite-latest', 'Gemini Flash-Lite Latest']
       ],
       keyUrl: 'https://aistudio.google.com/app/apikey'
     },
     groq: {
-      label: 'Groq', badge: 'API Key', requiresKey: true,
+      label: 'Groq',
+      badge: 'API Key',
+      requiresKey: true,
       models: [
-        ['openai/gpt-oss-20b', 'OpenAI GPT OSS 20B'],
+        ['llama-3.3-70b-versatile', '⚡ Llama 3.3 70B (Fast)'],
         ['openai/gpt-oss-120b', 'OpenAI GPT OSS 120B'],
-        ['llama-3.3-70b-versatile', 'Llama 3.3 70B'],
+        ['openai/gpt-oss-20b', 'OpenAI GPT OSS 20B']
       ],
       keyUrl: 'https://console.groq.com/keys'
     },
     openai: {
-      label: 'OpenAI', badge: 'API Key', requiresKey: true,
+      label: 'OpenAI',
+      badge: 'API Key',
+      requiresKey: true,
       models: [
         ['gpt-4o', 'GPT-4o'],
         ['gpt-4o-mini', 'GPT-4o Mini'],
@@ -34,7 +44,9 @@ window.NagaSaiShared = {
       keyUrl: 'https://platform.openai.com/api-keys'
     },
     anthropic: {
-      label: 'Anthropic Claude', badge: 'API Key', requiresKey: true,
+      label: 'Anthropic Claude',
+      badge: 'API Key',
+      requiresKey: true,
       models: [
         ['claude-3-7-sonnet-20250219', 'Claude 3.7 Sonnet'],
         ['claude-3-5-sonnet-20241022', 'Claude 3.5 Sonnet'],
@@ -43,32 +55,19 @@ window.NagaSaiShared = {
       keyUrl: 'https://console.anthropic.com/settings/keys'
     },
     openrouter: {
-      label: 'OpenRouter (Free)', badge: 'API Key', requiresKey: true,
+      label: 'OpenRouter (Free)',
+      badge: 'API Key',
+      requiresKey: true,
       models: [
-        ['openrouter/free', 'Auto Free Router'],
-        ['openai/gpt-oss-120b:free', 'OpenAI gpt-oss-120b'],
-        ['openai/gpt-oss-20b', 'OpenAI GPT OSS 20B'],
+        ['openrouter/free', 'Auto Free Router (Unlimited)'],
         ['google/gemma-3-27b-it', 'Gemma 3 27B']
       ],
       keyUrl: 'https://openrouter.ai/settings/keys'
     },
-    cohere: {
-      label: 'Cohere',
-      badge: 'FREE Trial',
-      requiresKey: true,
-
-      models: [
-        ['command-a', 'Command A'],
-        ['command-r-plus', 'Command R+'],
-        ['command-r', 'Command R'],
-        ['command-light', 'Command Light']
-      ],
-
-      keyUrl: 'https://dashboard.cohere.com/api-keys'
-    },
-
     custom: {
-      label: 'Custom API', badge: 'Advanced', requiresKey: true,
+      label: 'Custom / Local API',
+      badge: 'Advanced',
+      requiresKey: true,
       models: [['custom-model', 'Custom Model']],
       keyUrl: '#'
     }
@@ -76,106 +75,10 @@ window.NagaSaiShared = {
 
   MAX_CONTEXT_MESSAGES: 10,
 
-  googleBtnContent: function () {
-    return `<svg width="17" height="17" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-    Continue with Google`;
-  },
-
   formatMessage: function (text) {
     if (!text || typeof text !== 'string') return '';
-
-    // Strip out Markdown table divider rows (e.g. |---|---|)
-    text = text.replace(/^\s*\|[-|:\s]+\|\s*$/gm, '');
-
-    // Strip out leading blockquote characters and markdown alert headers (e.g. > [!NOTE] or >)
-    text = text.replace(/^\s*>\s*(?:\[!(?:NOTE|IMPORTANT|WARNING|TIP|CAUTION)\])?\s*/gim, '');
-
-    // Replace common LaTeX symbols for better readability
-    const latexMap = {
-      '\\\\le': '≤',
-      '\\\\ge': '≥',
-      '\\\\neq': '≠',
-      '\\\\approx': '≈',
-      '\\\\pm': '±',
-      '\\\\cdot': '·',
-      '\\\\times': '×',
-      '\\\\div': '÷',
-      '\\\\infty': '∞',
-      '\\\\pi': 'π',
-      '\\\\theta': 'θ',
-      '\\\\alpha': 'α',
-      '\\\\beta': 'β',
-      '\\\\gamma': 'γ',
-      '\\\\Delta': 'Δ',
-      '\\\\delta': 'δ',
-      '\\\\sum': '∑',
-      '\\\\prod': '∏',
-      '\\\\int': '∫',
-      '\\\\rightarrow': '→',
-      '\\\\leftarrow': '←',
-      '\\\\Rightarrow': '⇒',
-      '\\\\Leftarrow': '⇐',
-      '\\\\iff': '⇔'
-    };
-
-    for (const [key, value] of Object.entries(latexMap)) {
-      text = text.replace(new RegExp(key + '(?![a-zA-Z])', 'g'), value);
-    }
-
-    // Clean up math block delimiters
-    text = text.replace(/\\\[/g, '').replace(/\\\]/g, '').replace(/\\\(/g, '').replace(/\\\)/g, '');
-
-    const codeBlocks = [];
-    // Match closed blocks
-    text = text.replace(/```[^\n]*\n([\s\S]*?)```/g, (match, p1) => {
-      codeBlocks.push(p1);
-      return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
-    });
-    // Match unclosed block at end of stream
-    text = text.replace(/```[^\n]*\n([\s\S]*)$/, (match, p1) => {
-      codeBlocks.push(p1);
-      return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
-    });
-
-    const inlineCodes = [];
-    text = text.replace(/`([^`\n]+)`/g, (match, p1) => {
-      inlineCodes.push(p1);
-      return `__INLINE_CODE_${inlineCodes.length - 1}__`;
-    });
-
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    
-    // Process markdown headings - strip the '#' and make bold
-    html = html.replace(/^\s*#{1,6}\s+(.+)$/gm, '<strong>$1</strong>');
-    
-    // Process markdown lists
-    html = html.replace(/^\s*[-*+]\s+(.+)$/gm, '• $1');
-    html = html.replace(/^\s*(\d+)\.\s+(.+)$/gm, '$1. $2');
-
-    // Process bold and italic markers
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-    // Render table rows nicely if they contain pipe characters
-    html = html.replace(/^\s*\|(.+)\|$/gm, (match, content) => {
-      const cols = content.split('|').map(c => c.trim()).filter(c => c);
-      return cols.join(' | ');
-    });
-
-    const parts = html.split('\n');
-    html = parts.join('<br>');
-
-    html = html.replace(/__INLINE_CODE_(\d+)__/g, (match, index) => {
-      const escaped = inlineCodes[index].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<code>${escaped}</code>`;
-    });
-
-    html = html.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
-      const escaped = codeBlocks[index].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="nagasai-code-wrapper"><div class="nagasai-code-header"><button class="nagasai-copy-btn" title="Copy"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div><pre class="nagasai-code"><code>${escaped}</code></pre></div>`;
-    });
-
-    return html;
+    return `<div style="white-space: pre-wrap; word-wrap: break-word;">${html}</div>`;
   },
 
   buildPanelHTML: function (isSidePanel) {
@@ -202,15 +105,13 @@ window.NagaSaiShared = {
           <button id="nagasai-sidepanel-btn" class="nagasai-icon-btn" title="Open in Side Panel">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="15" y1="3" x2="15" y2="21"></line></svg>
           </button>
-          <button id="nagasai-clear" class="nagasai-icon-btn" title="Clear chat">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>
           `}
-          ${isSidePanel ? `
           <button id="nagasai-clear" class="nagasai-icon-btn" title="Clear chat">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           </button>
-          ` : ''}
+          <button id="nagasai-export-btn" class="nagasai-icon-btn" title="Export Chat">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </button>
           <button id="nagasai-settings-btn" class="nagasai-icon-btn" title="Settings">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
           </button>
@@ -220,27 +121,7 @@ window.NagaSaiShared = {
         </div>
       </div>
 
-      <div id="nagasai-toolbar">
-        <div class="nagasai-user-row">
-          <img id="nagasai-avatar" src="" alt="" />
-          <span id="nagasai-username"></span>
-        </div>
-        <button id="nagasai-signout-btn" class="nagasai-signout-btn">Sign out</button>
-      </div>
-
-      <div id="nagasai-signin-screen">
-        <div class="nagasai-signin-content">
-          <div class="nagasai-signin-logo">
-            <img src="chrome-extension://${chrome.runtime.id}/icons/logo.png" alt="NagaSai AI Logo" />
-          </div>
-          <h2>Welcome</h2>
-          <p>Want to work with NagaSai AI? Just sign in with Google and enjoy</p>
-          <button id="nagasai-signin-btn" class="nagasai-google-btn">${this.googleBtnContent()}</button>
-          <div style="margin-top: 15px;">
-            <a href="#" id="nagasai-not-google-link" class="nagasai-alt-link">Not google browser tap me</a>
-          </div>
-          <p id="nagasai-signin-error"></p>
-        </div>
+      <div id="nagasai-toolbar" style="display:none;">
       </div>
 
       <div id="nagasai-chat-screen">
@@ -281,9 +162,11 @@ window.NagaSaiShared = {
 
       <div id="nagasai-settings-screen">
         <div class="nagasai-settings-wrap">
-          <h3 class="nagasai-settings-section">Account</h3>
-          <div id="nagasai-settings-user" class="nagasai-settings-user"></div>
-          <button id="nagasai-signout-btn" class="nagasai-signout-btn nagasai-signout-full">Sign out</button>
+          <h3 class="nagasai-settings-section">Appearance</h3>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; background: rgba(0,0,0,0.1); padding: 8px; border-radius: 6px;">
+            <label style="margin-bottom: 0; font-size: 11px; color: #a0a0a0; white-space: nowrap;">App Opacity</label>
+            <input type="range" id="nagasai-pref-opacity" min="0.2" max="1" step="0.05" value="1" style="flex: 1; margin-left: 10px; cursor: pointer;" />
+          </div>
           <h3 class="nagasai-settings-section">API Keys</h3>
           <p style="font-size:10.5px;color:rgba(200,200,200,0.6);margin-bottom:5px;line-height:1.4;">Add your own free API keys to unlock models. Keys stored safely in Chrome Sync.</p>
           <div class="nagasai-keys-form">
@@ -306,10 +189,6 @@ window.NagaSaiShared = {
             <div class="nagasai-key-group">
               <label>OpenRouter Key <a href="${this.PROVIDERS.openrouter.keyUrl}" target="_blank">(Get free models)</a></label>
               <input type="password" id="nagasai-key-openrouter" placeholder="sk-or-v1-..." value="" />
-            </div>
-            <div class="nagasai-key-group">
-              <label>Cohere API Key <a href="${this.PROVIDERS.cohere.keyUrl}" target="_blank">(Get free key)</a></label>
-              <input type="password" id="nagasai-key-cohere" placeholder="xxxxxx..." value="" />
             </div>
             <hr style="border:0;height:1px;background:rgba(255,255,255,0.1);margin:12px 0;">
             <div class="nagasai-key-group">
@@ -335,13 +214,17 @@ window.NagaSaiShared = {
             <button id="nagasai-save-keys-btn" class="nagasai-google-btn" style="margin-top:5px;padding:7px;">Save &amp; Unlock Provider</button>
             <p id="nagasai-keys-msg" style="font-size:10.5px;color:#1dba8a;display:none;text-align:center;margin-top:2px;"></p>
           </div>
-          <h3 class="nagasai-settings-section">About</h3>
+          <h3 class="nagasai-settings-section">About & Privacy</h3>
           <div class="nagasai-about-card">
-            <p>🔒 <strong>Privacy First</strong> — Page content only sent when asking a question.</p>
-            <p>🤖 <strong>Multi-model</strong> — Gemini, GPT, Groq &amp; more. Free by default.</p>
+            <p>🔒 <strong>Privacy First</strong> — Page content is only sent when asking a question. We do not store or track your chats on external servers.</p>
+            <p>🤖 <strong>Multi-model</strong> — Gemini, GPT, Groq &amp; more. Add multiple comma-separated keys to enable automatic fallback on rate limits.</p>
             <p>🖱️ <strong>Drag icon</strong> — Drag the floating 'S' anywhere.</p>
             <p>📋 <strong>Screenshot</strong> — Ask questions about what's on your screen.</p>
           </div>
+          <p style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 15px;">
+            By using NagaSai AI, you agree that your API keys are stored locally on your device using Chrome storage. 
+            We do not log your conversations.
+          </p>
         </div>
       </div>
     </div>`;

@@ -148,8 +148,13 @@
   bottom: 53px !important;
   right: 12px !important;
   pointer-events: all !important;
-  width: 320px !important;
-  height: 340px !important;
+  width: 320px;
+  height: 420px;
+  min-width: 280px !important;
+  min-height: 300px !important;
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+  resize: both !important;
   background: var(--ns-bg-panel) !important;
   border-radius: 14px !important;
   border: 1px solid var(--ns-border-heavy) !important;
