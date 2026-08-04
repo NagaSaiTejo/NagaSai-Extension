@@ -299,12 +299,14 @@
 
   chrome.storage.onChanged.addListener((changes, namespace) => {
     if (namespace === 'local' && changes[K.CHAT_HISTORY]) {
-      chatHistory = changes[K.CHAT_HISTORY].newValue || [];
-      if (currentView === 'chat' && panelOpen) renderMessages();
+      if (!isLoading) {
+        chatHistory = changes[K.CHAT_HISTORY].newValue || [];
+        if (currentView === 'chat' && panelOpen) renderMessages();
       }
-      if (namespace === 'sync' && changes._s4) {
-        apiKeys = changes._s4.newValue || apiKeys;
-        renderView();
+    }
+    if (namespace === 'sync' && changes._s4) {
+      apiKeys = changes._s4.newValue || apiKeys;
+      renderView();
     }
   });
 
@@ -726,10 +728,11 @@
       const systemPrompt = `You are NagaSai AI, a friendly, intelligent, and conversational browser assistant.
 
 Instructions:
-1. VERY IMPORTANT: Keep your responses EXTREMELY short and concise, exactly like a natural human chat (e.g., 1-2 sentences). Do NOT write long essays unless explicitly asked to explain in detail.
-2. If the user asks a simple question or makes casual conversation, reply briefly. Do NOT summarize or mention the page content unless the user specifically asks about it.
-3. ONLY analyze the "PAGE CONTENT" below if the user's prompt directly references the page, the website, or the text on the screen.
-4. Keep formatting clean and easy to read. Use bold text for emphasis and bullet points only when necessary.
+1. VERY IMPORTANT: Keep your conversational responses EXTREMELY short and concise, exactly like a natural human chat (e.g., 1-2 sentences). Do NOT write long essays unless explicitly asked.
+2. If the user asks a simple question, reply briefly. Do NOT summarize or mention the page content unless the user specifically asks about it.
+3. ONLY analyze the "PAGE CONTENT" below if the user's prompt references the page/text on the screen, OR if the user asks for code/answers to a problem (assume the problem is in the page content).
+4. When providing code, ALWAYS wrap it in proper markdown code blocks (e.g., \`\`\`python ... \`\`\`). Do NOT use bold text for code. Provide direct, correct code solutions without unnecessary explanation.
+5. Keep formatting clean and easy to read. Use bold text for emphasis and bullet points only when necessary.
 
 Current Page Title: "${document.title}"
 URL: ${window.location.href}
@@ -764,7 +767,7 @@ ${pageContent}
       );
 
       const assistantMsgIdx = chatHistory.length;
-      chatHistory.push({ role: 'assistant', content: 'Generating...' });
+      chatHistory.push({ role: 'assistant', content: '' });
       renderMessages();
       setTimeout(() => scrollToNewAssistantMessage(), 30);
 
@@ -820,7 +823,7 @@ ${pageContent}
 
         } catch (err) {
           lastError = err;
-          console.warn(`[NagaSai] Provider "${attempt.provider}" failed: ${err.message}`);
+          console.log(`[NagaSai] Provider "${attempt.provider}" failed: ${err.message}`);
           
           // If aborted by user, stop chain
           if (err.message.includes('Generation stopped by user') || err.message.includes('aborted')) {
@@ -991,6 +994,9 @@ ${pageContent}
 
     container.innerHTML = '';
     chatHistory.forEach((msg, i) => {
+      // Don't render empty assistant messages (the loader handles this state visually)
+      if (msg.role === 'assistant' && !msg.content) return;
+
       const msgWrapper = document.createElement('div');
       msgWrapper.className = `nagasai-msg nagasai-msg--${msg.role}`;
       msgWrapper.dataset.index = i;
@@ -1022,7 +1028,10 @@ ${pageContent}
       container.appendChild(msgWrapper);
     });
 
-    if (isLoading) {
+    const lastMsg = chatHistory[chatHistory.length - 1];
+    const isWaitingForFirstChunk = isLoading && lastMsg && lastMsg.role === 'assistant' && !lastMsg.content;
+
+    if (isWaitingForFirstChunk) {
       const loader = document.createElement('div');
       loader.className = 'nagasai-msg nagasai-msg--assistant';
       loader.innerHTML = `<div class="nagasai-msg-label">Assistant</div><div class="nagasai-msg-bubble nagasai-typing"><span></span><span></span><span></span></div>`;

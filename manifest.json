@@ -50,7 +50,8 @@
     {
       "resources": [
         "icons/*",
-        "ui.css"
+        "ui.css",
+        "libs/*"
       ],
       "matches": [
         "<all_urls>"
