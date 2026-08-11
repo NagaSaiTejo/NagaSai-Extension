@@ -46,7 +46,7 @@ We may update this privacy notice from time to time. The updated version will be
 ## 6. Contact Us
 
 If you have questions or comments about this notice, you may email us at:
-**[Insert Your Contact Email Here]**
+**tejonagasai@gmail.com**
 
 ---
 *Note: To comply with the Chrome Web Store Developer Program Policies, please host this document on a public URL (such as GitHub Pages, a public Notion page, or a Google Doc published to the web) and provide that link in your Developer Dashboard.*
