@@ -122,7 +122,7 @@ function stripAds(text) {
 async function callGemini(model, messages, apiKey, onChunk, signal = null) {
     const useStream = typeof onChunk === 'function';
 
-    const cleanKey = apiKey.replace(/\s/g, '');
+    const cleanKey = apiKey.replace(/^(Bearer\s+|Bearer)/i, '').replace(/\s/g, '');
 
     const systemParts = messages
         .filter(m => m.role === 'system')
@@ -161,8 +161,8 @@ async function callGemini(model, messages, apiKey, onChunk, signal = null) {
     }
 
     const endpoint = useStream
-        ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${cleanKey}&alt=sse`
-        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+        ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     const requestBody = { contents };
     if (systemParts.length > 0) {
@@ -176,7 +176,10 @@ async function callGemini(model, messages, apiKey, onChunk, signal = null) {
         try {
             res = await fetch(endpoint, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': cleanKey
+                },
                 body: JSON.stringify(requestBody),
                 ...(signal ? { signal } : {})
             });
