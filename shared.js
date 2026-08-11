@@ -91,7 +91,7 @@ window.NagaSaiShared = {
           <span class="nagasai-ai-badge">AI</span>
         </div>
         <div class="nagasai-header-right">
-          <button id="nagasai-stealth-btn" class="nagasai-icon-btn" title="Stealth Mode — hide from screen share (click S to restore)" style="color: rgba(100,200,100,0.8);">
+          <button id="nagasai-privacy-btn" class="nagasai-icon-btn" title="Privacy Mode — hide from screen share (click S to restore)" style="color: rgba(100,200,100,0.8);">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           </button>
           <button id="nagasai-theme-btn" class="nagasai-icon-btn" title="Toggle Theme">

@@ -7,7 +7,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 
-/* ─── Stealth Light & Dark Variables ───────────────────────────────────── */
+/* ─── Light & Dark Variables ───────────────────────────────────── */
 #nagasai-root {
   /* DARK THEME (Default) */
   --ns-text-solid: #ffffff;
@@ -44,7 +44,7 @@
 
 @media (prefers-color-scheme: light) {
   #nagasai-root {
-    /* LIGHT THEME (Stealth / Black & White) */
+    /* LIGHT THEME (Black & White) */
     --ns-text-solid: #000000;
     --ns-text-primary: #222222;
     --ns-text-secondary: rgba(0, 0, 0, 0.65);

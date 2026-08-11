@@ -1,6 +1,6 @@
 # NagaSai AI — The Ultimate Web AI Assistant
 
-**A Stealthy, DOM-Isolated, Multi-Model Browser Companion**
+**A Private, DOM-Isolated, Multi-Model Browser Companion**
 
 NagaSai AI is a high-performance Chrome extension (Manifest V3) designed to be your permanent AI companion on the web. It integrates seamlessly into any webpage or your browser's side panel, allowing you to summarize, analyze, and chat with page content using the world's most powerful LLMs including **Google Gemini, GPT-4o, and Llama 3**.
 
@@ -19,8 +19,8 @@ NagaSai AI doesn't just "chat"; it **reads**. When you ask a question like *"Sum
 ### 3. Visual Reasoning (Screenshots)
 Got a complex chart, a weird error message, or a design you want to discuss? Click the **Camera Icon**. The extension captures a snapshot of your current tab (automatically hiding its own UI first) and attaches it to your message. Pair this with a model like **Gemini 1.5 Pro** or **GPT-4o** for elite vision capabilities.
 
-### 4. Stealth Mode
-Sharing your screen on Zoom or Teams? Use **Alt + Shift + H** (or the Green Eye icon) to enter **Stealth Mode**. This instantly closes the panels and makes the "S" toggle nearly invisible (transparent). Only you know where it is, keeping your AI assistant private during presentations.
+### 4. Privacy Mode
+Sharing your screen on Zoom or Teams? Use **Alt + Shift + H** (or the Green Eye icon) to enter **Privacy Mode**. This closes the panels and makes the "S" toggle nearly invisible (transparent). Only you know where it is, keeping your AI assistant private during presentations.
 
 ### 5. Flexible Authentication
 NagaSai AI provides two ways to access powerful AI:
@@ -48,7 +48,7 @@ The floating panel utilizes a **"Closed" Shadow DOM**. This ensures:
 A lean MV3 service worker that handles:
 - **OAuth2 Flow:** Secure Google Sign-in via `chrome.identity`.
 - **Screenshot Marshaling:** Capturing tab data without requiring local storage.
-- **Cross-Communication:** Syncing states (like Stealth Mode) across all active tabs.
+- **Cross-Communication:** Syncing states (like Privacy Mode) across all active tabs.
 
 ---
 

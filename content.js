@@ -14,12 +14,12 @@
     SAVE_API_KEYS: '_r5',
     LLM_REQUEST: '_r6',
     CAPTURE_SCREENSHOT: '_r7',
-    OPEN_SIDEPANEL: '_r8',
-    GET_SIDEPANEL_STATE: '_r9',
+    OPEN_SIDEPANEL: '_r10',
+    GET_SIDEPANEL_STATE: '_r11',
     PULL_PAGE_CONTENT: '_ra',
     SIDEPANEL_STATE: '_rb',
     OPEN_FLOATING: '_rc',
-    TOGGLE_STEALTH: '_rd',
+    TOGGLE_PRIVACY: '_rd',
     START_GENERATION: 'START_GENERATION',
     STOP_GENERATION: 'STOP_GENERATION',
   };
@@ -52,14 +52,17 @@
   let isDragging = false;
   let dragOffsetX = 0, dragOffsetY = 0;
   let attachedScreenshotUrl = null;
+  let attachedFileName = null;
+  let attachedFileText = null;
+  let isFileUploading = false;
   let currentPort = null;
   let toggleDragOffsetX = 0, toggleDragOffsetY = 0;
   let lastMouseX = 0, lastMouseY = 0;
   let isToggleDragging = false;
   let toggleHasMoved = false;
 
-  // Stealth mode: hides all extension UI during screen sharing
-  let isStealth = false;
+  // Privacy mode: hides all extension UI during screen sharing
+  let isPrivacyMode = false;
 
   // FOUC Fix: Hide UI until styles are loaded
   let uiRevealed = false;
@@ -67,7 +70,7 @@
     if (uiRevealed) return;
     uiRevealed = true;
     shadowHost.style.setProperty('opacity', '1', 'important');
-    if (!isStealth) {
+    if (!isPrivacyMode) {
       toggleBtn.style.setProperty('opacity', panelOpen ? '1' : '0.4', 'important');
       toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
     }
@@ -99,12 +102,12 @@
 
   const shadowRoot = shadowHost.attachShadow({ mode: 'closed' });
 
-  // ── Stealth Mode Functions ────────────────────────────────────
-  // enterStealth(): makes S button INVISIBLE (opacity:0) but keeps it CLICKABLE.
+  // ── Privacy Mode Functions ────────────────────────────────────
+  // enterPrivacyMode(): makes S button INVISIBLE (opacity:0) but keeps it CLICKABLE.
   // The user knows exactly where the S button is (bottom-right corner).
-  // Clients can't see a transparent element. Clicking the invisible S exits stealth.
-  function enterStealth() {
-    isStealth = true;
+  // Clients can't see a transparent element. Clicking the invisible S exits privacy mode.
+  function enterPrivacyMode() {
+    isPrivacyMode = true;
     // opacity:0 = invisible to camera/screen share but still physically clickable
     // We do NOT use display:none because that would make it unclickable
     toggleBtn.style.setProperty('opacity', '0', 'important');
@@ -117,9 +120,9 @@
     }
   }
 
-  // exitStealth(): makes S button fully visible again.
-  function exitStealth() {
-    isStealth = false;
+  // exitPrivacyMode(): makes S button fully visible again.
+  function exitPrivacyMode() {
+    isPrivacyMode = false;
     toggleBtn.style.removeProperty('opacity');
     toggleBtn.style.setProperty('pointer-events', 'auto', 'important');
     applyToggleStyle(toggleBtn, panelOpen);
@@ -132,13 +135,13 @@
     const _origGDM = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
     navigator.mediaDevices.getDisplayMedia = async function (constraints) {
       const stream = await _origGDM(constraints);
-      // Screen sharing just started — enter stealth immediately
-      enterStealth();
-      // Exit stealth when ALL video tracks end (sharing stopped)
+      // Screen sharing just started — enter privacy mode immediately
+      enterPrivacyMode();
+      // Exit privacy mode when ALL video tracks end (sharing stopped)
       stream.getVideoTracks().forEach(track => {
         track.addEventListener('ended', () => {
           if (stream.getVideoTracks().every(t => t.readyState === 'ended')) {
-            exitStealth();
+            exitPrivacyMode();
           }
         });
       });
@@ -275,24 +278,24 @@
       }
     }
     if (msg.type === T.OPEN_FLOATING) {
-      // Only open floating panel if NOT in stealth mode
-      if (!isStealth) {
+      // Only open floating panel if NOT in privacy mode
+      if (!isPrivacyMode) {
         panelOpen = true;
         panel.classList.add('nagasai-panel--open');
         applyToggleStyle(toggleBtn, true);
       }
     }
-    // Stealth toggle — triggered by Alt+Shift+H keyboard shortcut via background.js
+    // Privacy toggle — triggered by Alt+Shift+H keyboard shortcut via background.js
     // background.js sends msg.entering=true (hide) or false (show) explicitly
     // so content script and background are always in sync.
-    if (msg.type === T.TOGGLE_STEALTH) {
-      if (msg.entering === true) enterStealth();
-      else if (msg.entering === false) exitStealth();
+    if (msg.type === T.TOGGLE_PRIVACY) {
+      if (msg.entering === true) enterPrivacyMode();
+      else if (msg.entering === false) exitPrivacyMode();
       else {
         // Fallback: toggle if no explicit direction given
-        if (isStealth) exitStealth(); else enterStealth();
+        if (isPrivacyMode) exitPrivacyMode(); else enterPrivacyMode();
       }
-      sendResponse({ stealth: isStealth });
+      sendResponse({ privacy: isPrivacyMode });
     }
     return true;
   });
@@ -356,12 +359,12 @@
   });
 
   toggleBtn.addEventListener('mouseenter', () => {
-    if (isStealth) return; // don't reveal in stealth
+    if (isPrivacyMode) return; // don't reveal in privacy mode
     toggleBtn.style.opacity = '1';
     toggleBtn.style.transform = 'scale(1.1)';
   });
   toggleBtn.addEventListener('mouseleave', () => {
-    if (isStealth) return;
+    if (isPrivacyMode) return;
     if (!panelOpen) { toggleBtn.style.opacity = '0.4'; toggleBtn.style.transform = 'scale(1)'; }
   });
 
@@ -381,8 +384,8 @@
     }
 
     try {
-      // If in stealth mode, clicking the invisible S button exits stealth.
-      if (isStealth) { exitStealth(); return; }
+      // If in privacy mode, clicking the invisible S button exits privacy mode.
+      if (isPrivacyMode) { exitPrivacyMode(); return; }
 
       chrome.storage.local.get(K.PREFERRED_MODE, async (data) => {
         if (chrome.runtime.lastError) { showContextError(); return; }
@@ -445,12 +448,12 @@
       chrome.storage.local.remove(K.PREFERRED_MODE);
     });
 
-    // ◄ STEALTH BUTTON — the green eye icon in the panel header.
+    // ◄ PRIVACY BUTTON — the green eye icon in the panel header.
     // Clicking it immediately hides the panel AND makes the S button invisible
     // (but still clickable). Client cannot see a transparent element.
     // To come back: click where the S button was (bottom-right corner).
-    q('#nagasai-stealth-btn').addEventListener('click', () => {
-      enterStealth();
+    q('#nagasai-privacy-btn').addEventListener('click', () => {
+      enterPrivacyMode();
     });
 
     q('#nagasai-clear').addEventListener('click', () => {
@@ -513,12 +516,21 @@
             currentPort.postMessage({ type: T.STOP_GENERATION });
             currentPort = null;
           }
+          // Immediately re-enable input so user can type again
+          setLoading(false);
           return;
         }
         sendUserMessage();
       }
       if (e.target.closest('#nagasai-save-keys-btn')) saveApiKeys();
       if (e.target.closest('#nagasai-export-btn')) exportChatToHtml();
+
+      const uploadBtn = e.target.closest('#nagasai-upload-btn');
+      if (uploadBtn) {
+        e.preventDefault();
+        const fileInput = q('#nagasai-file-upload');
+        if (fileInput) fileInput.click();
+      }
 
       if (e.target.closest('#nagasai-screenshot-btn')) {
         e.preventDefault();
@@ -558,6 +570,12 @@
     });
 
     panel.addEventListener('change', (e) => {
+      if (e.target.id === 'nagasai-file-upload') {
+        if (e.target.files && e.target.files.length > 0) {
+          handleFileUpload(e.target.files[0]);
+          e.target.value = '';
+        }
+      }
       if (e.target.id === 'nagasai-provider-select') {
         selectedProvider = e.target.value;
         selectedModel = PROVIDERS[selectedProvider].models[0][0];
@@ -692,20 +710,23 @@
     // before any awaits. This is the only reliable guard against rapid
     // double-tap / race conditions.
     if (isLoading) return;
+    if (isFileUploading) return;
     setLoading(true);
 
     const input = q('#nagasai-input');
     const text = input?.value.trim() || '';
-    if (!text && !attachedScreenshotUrl) {
+    if (!text && !attachedScreenshotUrl && !attachedFileText) {
       setLoading(false);
       return;
     }
 
     const imgData = attachedScreenshotUrl;
+    const fName = attachedFileName;
+    const fText = attachedFileText;
     input.value = '';
     removeScreenshot();
 
-    const msg = { role: 'user', content: text, image: imgData };
+    const msg = { role: 'user', content: text, image: imgData, attachmentName: fName, attachmentText: fText };
     chatHistory.push(msg);
 
     // Bug #4 Fix: Strip image data from history before persisting to storage.
@@ -746,10 +767,14 @@ ${pageContent}
       // This prevents token explosion on long conversations and avoids sending
       // all stored screenshots (which are already stripped from persistence).
       const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES).map((msg, idx, arr) => {
+        const hiddenFileContext = msg.attachmentText
+          ? `${msg.content || `Please analyze the attached file: ${msg.attachmentName || 'uploaded file'}.`}\n\n--- Attached File: ${msg.attachmentName || 'Uploaded File'} ---\n${msg.attachmentText}`
+          : null;
+        const baseMsg = hiddenFileContext ? { ...msg, content: hiddenFileContext } : { ...msg };
         // Keep the image ONLY if it's the very last message in the history
-        if (idx === arr.length - 1) return { ...msg };
-        if (msg.image) return { ...msg, image: null, content: msg.content + "\n*(Previous image omitted to save quota)*" };
-        return { ...msg };
+        if (idx === arr.length - 1) return baseMsg;
+        if (baseMsg.image) return { ...baseMsg, image: null, content: baseMsg.content + "\n*(Previous image omitted to save quota)*" };
+        return baseMsg;
       });
       const messages = [{ role: 'system', content: systemPrompt }, ...contextHistory];
 
@@ -792,12 +817,22 @@ ${pageContent}
             currentPort = chrome.runtime.connect({ name: 'llm_stream' });
             currentPort.postMessage({ type: T.START_GENERATION, payload: { provider: attempt.provider, model: attempt.model, messages } });
 
+            // Per-provider timeout: abort after 60 seconds to avoid infinite hangs
+            const timeoutId = setTimeout(() => {
+              if (currentPort) {
+                currentPort.postMessage({ type: T.STOP_GENERATION });
+                currentPort = null;
+              }
+              reject(new Error(`${attempt.label} timed out after 60 seconds.`));
+            }, 60000);
+
             currentPort.onMessage.addListener((msg) => {
               if (msg.type === 'CHUNK') {
                 fullResponse = msg.accumulated;
                 chatHistory[chatHistory.length - 1].content = msg.accumulated;
                 renderMessages();
               } else if (msg.type === 'DONE') {
+                clearTimeout(timeoutId);
                 fullResponse = msg.response;
                 chatHistory[chatHistory.length - 1].content = msg.response;
                 saveChatHistory();
@@ -805,6 +840,7 @@ ${pageContent}
                 currentPort = null;
                 resolve();
               } else if (msg.type === 'ERROR') {
+                clearTimeout(timeoutId);
                 currentPort = null;
                 reject(new Error(msg.error));
               }
@@ -812,6 +848,7 @@ ${pageContent}
             
             // Handle disconnect if background script crashes
             currentPort.onDisconnect.addListener(() => {
+              clearTimeout(timeoutId);
               if (currentPort) {
                 currentPort = null;
                 reject(new Error('Extension background script disconnected unexpectedly.'));
@@ -847,10 +884,79 @@ ${pageContent}
   // Bug #4 Fix: Helper to save chat history WITHOUT image data
   function saveChatHistory() {
     const historyToSave = chatHistory.map(msg => {
-      if (msg.image) return { ...msg, image: null }; // strip base64 image blobs
-      return msg;
+      const saved = { ...msg };
+      if (saved.image) saved.image = null; // strip base64 image blobs
+      if (saved.attachmentText) saved.attachmentText = null; // strip extracted document text
+      return saved;
     });
     chrome.storage.local.set({ [K.CHAT_HISTORY]: historyToSave });
+  }
+
+  async function handleFileUpload(file) {
+    if (!file) return;
+    isFileUploading = true;
+    try {
+      attachedFileName = file.name;
+      const wrap = q('#nagasai-screenshot-preview-wrap');
+      const img = q('#nagasai-screenshot-preview');
+
+      let label = q('#nagasai-file-label');
+      if (label) label.remove();
+      label = document.createElement('div');
+      label.id = 'nagasai-file-label';
+      label.style.cssText = 'position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); color:white; padding:2px 6px; font-size:10px; border-radius:4px; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+      label.textContent = file.name;
+
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        await new Promise((resolve, reject) => {
+          reader.onload = (e) => {
+            attachedScreenshotUrl = e.target.result;
+            attachedFileText = null;
+            if (img) img.src = attachedScreenshotUrl;
+            if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
+            resolve();
+          };
+          reader.onerror = () => reject(reader.error || new Error('Failed to read image file.'));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        attachedScreenshotUrl = null;
+        if (img) img.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+        if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
+
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let text = '';
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map(item => item.str).join(' ') + '\n';
+          }
+          attachedFileText = text;
+        } else if (lowerName.endsWith('.docx')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          attachedFileText = result.value;
+        } else {
+          attachedFileText = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result || '');
+            reader.onerror = () => reject(reader.error || new Error('Failed to read text file.'));
+            reader.readAsText(file);
+          });
+        }
+      }
+    } catch (e) {
+      attachedFileText = null;
+      attachedScreenshotUrl = null;
+      chatHistory.push({ role: 'assistant', content: `⚠️ **Error parsing document**: ${e.message}` });
+      renderMessages();
+    } finally {
+      isFileUploading = false;
+    }
   }
 
   // ── Page Content Extractor ─────────────────────────────────────
@@ -1018,8 +1124,15 @@ ${pageContent}
         bubble.appendChild(img);
       }
 
+      if (msg.attachmentName) {
+        const attDiv = document.createElement('div');
+        attDiv.style.cssText = 'background:rgba(0,0,0,0.1); padding:4px 8px; border-radius:4px; margin-bottom:6px; font-size:11px; display:inline-flex; align-items:center; gap:4px;';
+        attDiv.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <b>File attached</b>`;
+        bubble.appendChild(attDiv);
+      }
+
       if (msg.role === 'user') {
-        bubble.appendChild(document.createTextNode(msg.content));
+        if (msg.content) bubble.appendChild(document.createTextNode(msg.content));
       } else {
         bubble.innerHTML += formatMessage(msg.content);
       }
@@ -1051,11 +1164,13 @@ ${pageContent}
       if (sendBtn) {
         sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>';
         sendBtn.style.color = '#ff4a4a';
+        sendBtn.title = 'Stop Generation';
       }
     } else {
       if (sendBtn) {
         sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
         sendBtn.style.color = '';
+        sendBtn.title = 'Send (Enter)';
       }
     }
     if (input) input.disabled = isLoad;

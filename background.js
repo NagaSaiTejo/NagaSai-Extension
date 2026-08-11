@@ -15,7 +15,7 @@ const T = {
   PULL_PAGE_CONTENT: '_ra',
   SIDEPANEL_STATE: '_rb',
   OPEN_FLOATING: '_rc',
-  TOGGLE_STEALTH: '_rd',   // stealth mode: hide/show all extension UI
+  TOGGLE_PRIVACY: '_rd',   // privacy mode: hide/show all extension UI
   START_GENERATION: 'START_GENERATION',
   STOP_GENERATION: 'STOP_GENERATION',
 };
@@ -35,7 +35,7 @@ let sidePanelPort = null;  // stored so we can message sidepanel.js directly
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === PORT_NAME) {
     sidePanelOpen = true;
-    sidePanelPort = port;  // keep reference so stealth can FORCE_CLOSE it
+    sidePanelPort = port;  // keep reference so privacy mode can FORCE_CLOSE it
     broadcastSidePanelState(true);
     port.onDisconnect.addListener(() => {
       sidePanelOpen = false;
@@ -222,32 +222,32 @@ function handleScreenshot(sender, sendResponse) {
   });
 }
 
-// ── Stealth Mode ────────────────────────────────────────────────────────────
+// ── Privacy Mode ────────────────────────────────────────────────────────────
 // Alt+Shift+H hides EVERYTHING:
-//   1. S button + floating panel  → via TOGGLE_STEALTH to content script
+//   1. S button + floating panel  → via TOGGLE_PRIVACY to content script
 //   2. Chrome Side Panel          → via FORCE_CLOSE port message to sidepanel.js
 //                                    sidepanel.js calls window.close() on itself
 // This is the only reliable way to close the side panel — chrome.sidePanel.setOptions
 // alone doesn't guarantee closing an already-open panel.
 
-let stealthActive = false;
-let stealthSidePanelTabId = null;
+let privacyModeActive = false;
+let privacyModeSidePanelTabId = null;
 
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== '_toggle_stealth') return;
+  if (command !== '_toggle_privacy') return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  stealthActive = !stealthActive;
+  privacyModeActive = !privacyModeActive;
 
-  if (stealthActive) {
+  if (privacyModeActive) {
     // 1. Hide S button + floating panel in the page
-    chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_STEALTH, entering: true }).catch(() => { });
+    chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_PRIVACY, entering: true }).catch(() => { });
 
     // 2. Force-close the side panel by messaging sidepanel.js directly through the port.
     //    sidepanel.js receives 'FORCE_CLOSE' and calls window.close() on itself.
-    stealthSidePanelTabId = sidePanelOpen ? tab.id : null;
+    privacyModeSidePanelTabId = sidePanelOpen ? tab.id : null;
     if (sidePanelPort) {
       try { sidePanelPort.postMessage({ type: 'FORCE_CLOSE' }); } catch (_) { }
     }
@@ -256,15 +256,15 @@ chrome.commands.onCommand.addListener(async (command) => {
 
   } else {
     // 1. Restore S button + floating panel
-    chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_STEALTH, entering: false }).catch(() => { });
+    chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_PRIVACY, entering: false }).catch(() => { });
 
     // 2. Re-enable side panel so user can open it again
     try {
       await chrome.sidePanel.setOptions({ tabId: tab.id, enabled: true });
-      // Auto-reopen if it was open before stealth
-      if (stealthSidePanelTabId === tab.id) {
+      // Auto-reopen if it was open before privacy mode
+      if (privacyModeSidePanelTabId === tab.id) {
         await chrome.sidePanel.open({ tabId: tab.id });
-        stealthSidePanelTabId = null;
+        privacyModeSidePanelTabId = null;
       }
     } catch (_) { }
   }

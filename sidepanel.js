@@ -10,7 +10,8 @@
     SAVE_API_KEYS: '_r5',
     LLM_REQUEST: '_r6',
     CAPTURE_SCREENSHOT: '_r7',
-    OPEN_SIDEPANEL: '_r8',
+    OPEN_SIDEPANEL: '_r10',
+    TOGGLE_PRIVACY: '_rd',
     PULL_PAGE_CONTENT: '_ra',
     OPEN_FLOATING: '_rc',
     START_GENERATION: 'START_GENERATION',
@@ -40,6 +41,7 @@
   let attachedScreenshotUrl = null;
   let attachedFileName = null;
   let attachedFileText = null;
+  let isFileUploading = false;
 
   if (typeof pdfjsLib !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('libs/pdf.worker.min.js');
@@ -56,11 +58,19 @@
 
   // Apply saved theme and opacity preference immediately
   const storedTheme = localStorage.getItem('_xt') || 'dark';
-  if (storedTheme === 'light') panel.classList.add('ns-light-theme');
-  else panel.classList.add('ns-dark-theme');
+  if (storedTheme === 'light') panelRoot.classList.add('ns-light-theme');
+  else panelRoot.classList.add('ns-dark-theme');
 
-  const storedOpacity = localStorage.getItem('_xo') || '1';
-  panel.style.opacity = storedOpacity;
+  function syncShellBackground() {
+    const isLight = panelRoot.classList.contains('ns-light-theme');
+    const shellColor = isLight ? '#ffffff' : '#161616';
+    document.documentElement.style.background = shellColor;
+    document.body.style.background = shellColor;
+  }
+
+  syncShellBackground();
+
+  panelRoot.style.opacity = '1';
 
   // Force full-screen open immediately since it's the side panel
   panelOpen = true;
@@ -70,7 +80,7 @@
   const port = chrome.runtime.connect({ name: PORT_NAME });
 
   // Listen for commands from background.js sent directly through the port.
-  // FORCE_CLOSE is sent when the user activates stealth mode (Alt+Shift+H).
+  // FORCE_CLOSE is sent when the user activates privacy mode (Alt+Shift+H).
   // window.close() is the ONLY reliable way to close the side panel from inside.
   port.onMessage.addListener((msg) => {
     if (msg.type === 'FORCE_CLOSE') {
@@ -137,15 +147,15 @@
       window.close();
     });
 
-    // ◄ STEALTH BUTTON — the green eye icon in the side panel header.
+    // ◄ PRIVACY BUTTON — the green eye icon in the side panel header.
     // 1. Tells the content script to make the S button invisible (opacity:0, still clickable)
     // 2. Calls window.close() to close the side panel itself
-    // To exit stealth: click where the S button was (bottom-right corner of page).
-    panel.querySelector('#nagasai-stealth-btn').addEventListener('click', async () => {
+    // To exit privacy mode: click where the S button was (bottom-right corner of page).
+    panel.querySelector('#nagasai-privacy-btn').addEventListener('click', async () => {
       // Hide the S button on the active tab's page
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_STEALTH, entering: true }).catch(() => { });
+        chrome.tabs.sendMessage(tab.id, { type: T.TOGGLE_PRIVACY, entering: true }).catch(() => { });
       }
       // Close the side panel
       window.close();
@@ -159,19 +169,21 @@
 
     // Bug #2 Fix: Theme toggle logic correctly reads and updates panelRoot class
     panel.querySelector('#nagasai-theme-btn').addEventListener('click', () => {
-      const isDark = panel.classList.contains('ns-dark-theme') ||
-        (!panel.classList.contains('ns-light-theme') &&
+      const isDark = panelRoot.classList.contains('ns-dark-theme') ||
+        (!panelRoot.classList.contains('ns-light-theme') &&
           !window.matchMedia('(prefers-color-scheme: light)').matches);
 
       if (isDark) {
-        panel.classList.remove('ns-dark-theme');
-        panel.classList.add('ns-light-theme');
+        panelRoot.classList.remove('ns-dark-theme');
+        panelRoot.classList.add('ns-light-theme');
         localStorage.setItem('_xt', 'light');
       } else {
-        panel.classList.remove('ns-light-theme');
-        panel.classList.add('ns-dark-theme');
+        panelRoot.classList.remove('ns-light-theme');
+        panelRoot.classList.add('ns-dark-theme');
         localStorage.setItem('_xt', 'dark');
       }
+
+      syncShellBackground();
     });
 
     panel.querySelector('#nagasai-settings-btn').addEventListener('click', () => {
@@ -187,6 +199,8 @@
             currentPort.postMessage({ type: T.STOP_GENERATION });
             currentPort = null;
           }
+          // Immediately re-enable input so user can type again
+          setLoading(false);
           return;
         }
         sendUserMessage();
@@ -407,11 +421,12 @@
   async function sendUserMessage() {
     // Bug #13 Fix: Set isLoading = true IMMEDIATELY before any await.
     if (isLoading) return;
+    if (isFileUploading) return;
     setLoading(true);
 
     const input = panel.querySelector('#nagasai-input');
     const text = input?.value.trim() || '';
-    if (!text && !attachedScreenshotUrl) {
+    if (!text && !attachedScreenshotUrl && !attachedFileText) {
       setLoading(false);
       return;
     }
@@ -423,12 +438,7 @@
     input.value = '';
     removeScreenshot();
 
-    let finalContent = text;
-    if (fText) {
-      finalContent += `\n\n--- Attached File: ${fName} ---\n${fText}`;
-    }
-
-    const msg = { role: 'user', content: finalContent, image: imgData, attachmentName: fName };
+    const msg = { role: 'user', content: text, image: imgData, attachmentName: fName, attachmentText: fText };
     chatHistory.push(msg);
 
     // Bug #4 Fix: Strip image data before saving to storage
@@ -479,10 +489,14 @@ ${pageContent}
       // Only send last MAX_CONTEXT_MESSAGES to avoid token explosion
       // Strip images from past messages to prevent massive token usage
       const contextHistory = chatHistory.slice(-MAX_CONTEXT_MESSAGES).map((msg, idx, arr) => {
+        const hiddenFileContext = msg.attachmentText
+          ? `${msg.content || `Please analyze the attached file: ${msg.attachmentName || 'uploaded file'}.`}\n\n--- Attached File: ${msg.attachmentName || 'Uploaded File'} ---\n${msg.attachmentText}`
+          : null;
+        const baseMsg = hiddenFileContext ? { ...msg, content: hiddenFileContext } : { ...msg };
         // Keep the image ONLY if it's the very last message in the history
-        if (idx === arr.length - 1) return { ...msg };
-        if (msg.image) return { ...msg, image: null, content: msg.content + "\n*(Previous image omitted to save quota)*" };
-        return { ...msg };
+        if (idx === arr.length - 1) return baseMsg;
+        if (baseMsg.image) return { ...baseMsg, image: null, content: baseMsg.content + "\n*(Previous image omitted to save quota)*" };
+        return baseMsg;
       });
 
       // Inject auto-screenshot into last user message for vision models
@@ -496,9 +510,9 @@ ${pageContent}
       // Smart Fallback Chain
       const fallbackChain = [
         { provider: selectedProvider, model: selectedModel, label: 'Selected AI' },
-        { provider: 'google', model: 'gemini-3.6-flash', label: 'Gemini', available: !!apiKeys.google?.trim() },
+        { provider: 'google', model: 'gemini-2.0-flash', label: 'Gemini', available: !!apiKeys.google?.trim() },
         { provider: 'groq', model: 'llama-3.3-70b-versatile', label: 'Groq', available: !!apiKeys.groq?.trim() },
-        { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free', available: !!apiKeys.openrouter?.trim() },
+        { provider: 'openrouter', model: 'meta-llama/llama-4-maverick:free', label: 'OpenRouter Free', available: !!apiKeys.openrouter?.trim() },
         { provider: 'anthropic', model: 'claude-3-5-haiku-20241022', label: 'Claude Haiku', available: !!apiKeys.anthropic?.trim() },
         { provider: 'pollinations', model: 'openai', label: 'Free AI (No Key)', available: true }
       ].filter((item, index, self) => 
@@ -532,12 +546,22 @@ ${pageContent}
             currentPort = chrome.runtime.connect({ name: 'llm_stream' });
             currentPort.postMessage({ type: T.START_GENERATION, payload: { provider: attempt.provider, model: attempt.model, messages } });
 
+            // Per-provider timeout: abort after 60 seconds to avoid infinite hangs
+            const timeoutId = setTimeout(() => {
+              if (currentPort) {
+                currentPort.postMessage({ type: T.STOP_GENERATION });
+                currentPort = null;
+              }
+              reject(new Error(`${attempt.label} timed out after 60 seconds.`));
+            }, 60000);
+
             currentPort.onMessage.addListener((msg) => {
               if (msg.type === 'CHUNK') {
                 fullResponse = msg.accumulated;
                 chatHistory[chatHistory.length - 1].content = msg.accumulated;
                 renderMessages();
               } else if (msg.type === 'DONE') {
+                clearTimeout(timeoutId);
                 fullResponse = msg.response;
                 chatHistory[chatHistory.length - 1].content = msg.response;
                 saveChatHistory();
@@ -545,6 +569,7 @@ ${pageContent}
                 currentPort = null;
                 resolve();
               } else if (msg.type === 'ERROR') {
+                clearTimeout(timeoutId);
                 currentPort = null;
                 reject(new Error(msg.error));
               }
@@ -552,6 +577,7 @@ ${pageContent}
             
             // Handle disconnect if background script crashes
             currentPort.onDisconnect.addListener(() => {
+              clearTimeout(timeoutId);
               if (currentPort) {
                 currentPort = null;
                 reject(new Error('Extension background script disconnected unexpectedly.'));
@@ -587,8 +613,10 @@ ${pageContent}
   // Bug #4 Fix: Helper — save chat history with images stripped
   function saveChatHistory() {
     const historyToSave = chatHistory.map(msg => {
-      if (msg.image) return { ...msg, image: null }; // strip base64 blobs
-      return msg;
+      const saved = { ...msg };
+      if (saved.image) saved.image = null; // strip base64 blobs
+      if (saved.attachmentText) saved.attachmentText = null; // strip extracted document text
+      return saved;
     });
     chrome.storage.local.set({ [K.CHAT_HISTORY]: historyToSave });
   }
@@ -637,17 +665,11 @@ ${pageContent}
     if (currentView === 'settings') {
       show(settingsScreen);
       populateSettingsUser();
-      
-      // Hook up opacity slider in settings
+
       const opacitySlider = panel.querySelector('#nagasai-pref-opacity');
       if (opacitySlider) {
-        opacitySlider.value = localStorage.getItem('_xo') || '1';
-        opacitySlider.addEventListener('input', (e) => {
-          panel.style.opacity = e.target.value;
-        });
-        opacitySlider.addEventListener('change', (e) => {
-          localStorage.setItem('_xo', e.target.value);
-        });
+        const opacityRow = opacitySlider.parentElement;
+        if (opacityRow) opacityRow.style.display = 'none';
       }
     } else {
       show(chatScreen);
@@ -760,7 +782,7 @@ ${pageContent}
       if (msg.attachmentName) {
         const attDiv = document.createElement('div');
         attDiv.style.cssText = 'background:rgba(0,0,0,0.1); padding:4px 8px; border-radius:4px; margin-bottom:6px; font-size:11px; display:inline-flex; align-items:center; gap:4px;';
-        attDiv.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <b>${msg.attachmentName}</b>`;
+        attDiv.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg> <b>File attached</b>`;
         bubble.appendChild(attDiv);
       }
 
@@ -775,8 +797,10 @@ ${pageContent}
       }
 
       if (msg.role === 'user') {
-        const textNode = document.createTextNode(msg.content);
-        bubble.appendChild(textNode);
+        if (msg.content) {
+          const textNode = document.createTextNode(msg.content);
+          bubble.appendChild(textNode);
+        }
       } else {
         bubble.innerHTML += formatMessage(msg.content);
       }
@@ -809,11 +833,13 @@ ${pageContent}
       if (sendBtn) {
         sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"/></svg>';
         sendBtn.style.color = '#ff4a4a';
+        sendBtn.title = 'Stop Generation';
       }
     } else {
       if (sendBtn) {
         sendBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
         sendBtn.style.color = '';
+        sendBtn.title = 'Send (Enter)';
       }
     }
     if (input) input.disabled = isLoad;
@@ -1011,55 +1037,68 @@ ${pageContent}
 
   async function handleFileUpload(file) {
     if (!file) return;
-    attachedFileName = file.name;
-    const wrap = panel.querySelector('#nagasai-screenshot-preview-wrap');
-    const img = panel.querySelector('#nagasai-screenshot-preview');
+    isFileUploading = true;
+    try {
+      attachedFileName = file.name;
+      const wrap = panel.querySelector('#nagasai-screenshot-preview-wrap');
+      const img = panel.querySelector('#nagasai-screenshot-preview');
 
-    let label = panel.querySelector('#nagasai-file-label');
-    if (label) label.remove();
-    label = document.createElement('div');
-    label.id = 'nagasai-file-label';
-    label.style.cssText = 'position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); color:white; padding:2px 6px; font-size:10px; border-radius:4px; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-    label.textContent = file.name;
+      let label = panel.querySelector('#nagasai-file-label');
+      if (label) label.remove();
+      label = document.createElement('div');
+      label.id = 'nagasai-file-label';
+      label.style.cssText = 'position:absolute; bottom:5px; left:5px; background:rgba(0,0,0,0.7); color:white; padding:2px 6px; font-size:10px; border-radius:4px; max-width:90%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+      label.textContent = file.name;
 
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        attachedScreenshotUrl = e.target.result;
-        attachedFileText = null;
-        if (img) img.src = attachedScreenshotUrl;
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        await new Promise((resolve, reject) => {
+          reader.onload = (e) => {
+            attachedScreenshotUrl = e.target.result;
+            attachedFileText = null;
+            if (img) img.src = attachedScreenshotUrl;
+            if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
+            resolve();
+          };
+          reader.onerror = () => reject(reader.error || new Error('Failed to read image file.'));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        attachedScreenshotUrl = null;
+        if (img) img.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
         if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
-      };
-      reader.readAsDataURL(file);
-    } else {
-      attachedScreenshotUrl = null;
-      if (img) img.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
-      if (wrap) { wrap.appendChild(label); wrap.classList.add('ns-show'); }
 
-      try {
-        if (file.name.endsWith('.pdf')) {
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.pdf')) {
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           let text = '';
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
-            text += content.items.map(item => item.str).join(' ') + '\\n';
+            text += content.items.map(item => item.str).join(' ') + '\n';
           }
           attachedFileText = text;
-        } else if (file.name.endsWith('.docx')) {
+        } else if (lowerName.endsWith('.docx')) {
           const arrayBuffer = await file.arrayBuffer();
           const result = await mammoth.extractRawText({ arrayBuffer });
           attachedFileText = result.value;
         } else {
-          const reader = new FileReader();
-          reader.onload = (e) => { attachedFileText = e.target.result; };
-          reader.readAsText(file);
+          attachedFileText = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result || '');
+            reader.onerror = () => reject(reader.error || new Error('Failed to read text file.'));
+            reader.readAsText(file);
+          });
         }
-      } catch (e) {
-        chatHistory.push({ role: 'assistant', content: `⚠️ **Error parsing document**: ${e.message}` });
-        renderMessages();
       }
+    } catch (e) {
+      attachedFileText = null;
+      attachedScreenshotUrl = null;
+      chatHistory.push({ role: 'assistant', content: `⚠️ **Error parsing document**: ${e.message}` });
+      renderMessages();
+    } finally {
+      isFileUploading = false;
     }
   }
 

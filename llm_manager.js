@@ -122,7 +122,15 @@ function stripAds(text) {
 async function callGemini(model, messages, apiKey, onChunk, signal = null) {
     const useStream = typeof onChunk === 'function';
 
-    const contents = messages.map(m => {
+    const cleanKey = apiKey.replace(/\s/g, '');
+
+    const systemParts = messages
+        .filter(m => m.role === 'system')
+        .map(m => ({ text: m.content }));
+
+    const nonSystemMessages = messages.filter(m => m.role !== 'system');
+
+    const rawContents = nonSystemMessages.map(m => {
         const parts = [];
         if (m.image) {
             const prefix = m.image.split(',')[0];
@@ -139,9 +147,27 @@ async function callGemini(model, messages, apiKey, onChunk, signal = null) {
         };
     }).filter(c => c.parts.length > 0);
 
+    const contents = [];
+    for (const entry of rawContents) {
+        if (contents.length > 0 && contents[contents.length - 1].role === entry.role) {
+            contents[contents.length - 1].parts.push(...entry.parts);
+        } else {
+            contents.push({ role: entry.role, parts: [...entry.parts] });
+        }
+    }
+
+    if (contents.length > 0 && contents[contents.length - 1].role === 'model') {
+        contents.push({ role: 'user', parts: [{ text: 'Please continue.' }] });
+    }
+
     const endpoint = useStream
-        ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`
-        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${cleanKey}&alt=sse`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+
+    const requestBody = { contents };
+    if (systemParts.length > 0) {
+        requestBody.systemInstruction = { parts: systemParts };
+    }
 
     let res;
     let lastError = null;
@@ -151,7 +177,7 @@ async function callGemini(model, messages, apiKey, onChunk, signal = null) {
             res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents }),
+                body: JSON.stringify(requestBody),
                 ...(signal ? { signal } : {})
             });
 

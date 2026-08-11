@@ -59,11 +59,11 @@
     }
   ],
   "commands": {
-    "_toggle_stealth": {
+    "_toggle_privacy": {
       "suggested_key": {
         "default": "Alt+Shift+H"
       },
-      "description": "Toggle NagaSai AI stealth mode (hide/show during screen sharing)"
+      "description": "Toggle NagaSai AI privacy mode (hide/show during screen sharing)"
     }
   }
 }
