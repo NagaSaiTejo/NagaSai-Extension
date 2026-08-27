@@ -63,7 +63,7 @@
 
   function syncShellBackground() {
     const isLight = panelRoot.classList.contains('ns-light-theme');
-    const shellColor = isLight ? '#ffffff' : '#161616';
+    const shellColor = isLight ? '#f8fafc' : '#0d1117';
     document.documentElement.style.background = shellColor;
     document.body.style.background = shellColor;
   }
@@ -245,11 +245,11 @@
             const textToCopy = codeBlock.textContent;
             navigator.clipboard.writeText(textToCopy);
 
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = 'Copied!';
+            const originalHTML = copyBtn.innerHTML;
+            copyBtn.innerHTML = '✓ Copied!';
             copyBtn.classList.add('copied');
             setTimeout(() => {
-              copyBtn.textContent = originalText;
+              copyBtn.innerHTML = originalHTML;
               copyBtn.classList.remove('copied');
             }, 2000);
           } catch (err) {
@@ -559,12 +559,14 @@ ${pageContent}
               if (msg.type === 'CHUNK') {
                 fullResponse = msg.accumulated;
                 chatHistory[chatHistory.length - 1].content = msg.accumulated;
-                renderMessages();
+                // ── Fix: update only the streaming bubble in-place, no full DOM wipe
+                updateStreamingBubble(msg.accumulated);
               } else if (msg.type === 'DONE') {
                 clearTimeout(timeoutId);
                 fullResponse = msg.response;
                 chatHistory[chatHistory.length - 1].content = msg.response;
                 saveChatHistory();
+                // Final clean render after streaming is complete
                 renderMessages();
                 currentPort = null;
                 resolve();
@@ -822,6 +824,41 @@ ${pageContent}
       container.appendChild(loader);
     }
 
+    scrollToBottom();
+  }
+
+  // ─── Streaming Bubble Updater (no-flicker) ─────────────────────
+  // Instead of rebuilding the entire DOM on every chunk, this finds
+  // the last assistant bubble and updates only its innerHTML in-place.
+  function updateStreamingBubble(text) {
+    const container = panel.querySelector('#nagasai-messages');
+    if (!container) return;
+
+    let bubble = container.querySelector('.nagasai-msg--assistant:last-child .nagasai-msg-bubble');
+
+    if (!bubble) {
+      // First chunk: the loader dot animation is still showing.
+      // Replace it with a proper message wrapper.
+      const existingLoader = container.querySelector('.nagasai-msg--assistant:last-child');
+      if (existingLoader) existingLoader.remove();
+
+      const msgWrapper = document.createElement('div');
+      msgWrapper.className = 'nagasai-msg nagasai-msg--assistant';
+
+      const label = document.createElement('div');
+      label.className = 'nagasai-msg-label';
+      label.textContent = 'Assistant';
+
+      bubble = document.createElement('div');
+      bubble.className = 'nagasai-msg-bubble';
+
+      msgWrapper.appendChild(label);
+      msgWrapper.appendChild(bubble);
+      container.appendChild(msgWrapper);
+    }
+
+    // Render markdown and append blinking cursor
+    bubble.innerHTML = formatMessage(text) + '<span class="ns-cursor"></span>';
     scrollToBottom();
   }
 

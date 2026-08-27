@@ -34,10 +34,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
     "sidePanel",
-    "tabs",
-    "downloads"
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>",

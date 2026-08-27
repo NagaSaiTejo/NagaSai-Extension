@@ -78,7 +78,27 @@ window.NagaSaiShared = {
   formatMessage: function (text) {
     if (!text || typeof text !== 'string') return '';
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return `<div style="white-space: pre-wrap; word-wrap: break-word;">${html}</div>`;
+    
+    // Parse Markdown (Code blocks)
+    html = html.replace(/```([a-z0-9+#]*)\n([\s\S]*?)```/gi, (match, lang, code) => {
+      lang = lang || 'code';
+      const copyIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+      return `<div class="nagasai-code-wrapper">
+  <div class="nagasai-code-header">
+    <span class="nagasai-code-lang">${lang}</span>
+    <button class="nagasai-copy-btn">${copyIcon} Copy</button>
+  </div>
+  <pre class="nagasai-code"><code>${code}</code></pre>
+</div>`;
+    });
+
+    // Inline code, Bold, Lists
+    html = html.replace(/`([^`\n]+)`/g, '<code style="background:rgba(128,128,128,0.2);padding:2px 4px;border-radius:3px;">$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/^[-*]\s+(.*)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>(?:\n<li>.*<\/li>)*)/g, '<ul style="margin:4px 0;padding-left:20px;">$1</ul>');
+
+    return `<div style="white-space: pre-wrap; word-wrap: break-word; line-height: 1.5;">${html}</div>`;
   },
 
   buildPanelHTML: function (isSidePanel) {
