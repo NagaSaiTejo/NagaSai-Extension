@@ -17,7 +17,7 @@
     START_GENERATION: 'START_GENERATION',
     STOP_GENERATION: 'STOP_GENERATION'
   };
-  const K = { CHAT_HISTORY: '_c1', PREFERRED_MODE: '_c2', IS_GUEST: '_c3' };
+  const K = { CHAT_HISTORY: '_c1', PREFERRED_MODE: '_c2', IS_GUEST: '_c3', SELECTED_PROVIDER: '_c4', SELECTED_MODEL: '_c5' };
   const PORT_NAME = '_p0rt_sp';
 
   // Bug #5 Fix: Sliding window — only send last N messages to LLM
@@ -88,7 +88,9 @@
     }
   });
 
-  chrome.storage.local.get([K.CHAT_HISTORY, K.IS_GUEST], (data) => {
+  chrome.storage.local.get([K.CHAT_HISTORY, K.IS_GUEST, K.SELECTED_PROVIDER, K.SELECTED_MODEL], (data) => {
+    if (data[K.SELECTED_PROVIDER]) selectedProvider = data[K.SELECTED_PROVIDER];
+    if (data[K.SELECTED_MODEL]) selectedModel = data[K.SELECTED_MODEL];
     if (data[K.CHAT_HISTORY]) {
       chatHistory = data[K.CHAT_HISTORY];
       if (currentView === 'chat') renderMessages();
@@ -96,6 +98,8 @@
     if (data[K.IS_GUEST]) {
       handleAlternativeBrowserMode(true); // silent restore
     }
+    renderProviderSelect();
+    renderModelSelect();
   });
 
   // Listen for storage changes (chat history sync across tabs/panels)
@@ -118,6 +122,14 @@
   // Then async check real auth state
   (async () => {
     await refreshAuthState();
+
+    // Restore selected provider and model after keys are loaded
+    chrome.storage.local.get([K.SELECTED_PROVIDER, K.SELECTED_MODEL], (data) => {
+      if (data[K.SELECTED_PROVIDER]) selectedProvider = data[K.SELECTED_PROVIDER];
+      if (data[K.SELECTED_MODEL]) selectedModel = data[K.SELECTED_MODEL];
+      renderProviderSelect();
+    });
+
     setupEventListeners();
   })();
 
@@ -270,10 +282,12 @@
       if (e.target.id === 'nagasai-provider-select') {
         selectedProvider = e.target.value;
         selectedModel = PROVIDERS[selectedProvider].models[0][0];
+        chrome.storage.local.set({ [K.SELECTED_PROVIDER]: selectedProvider, [K.SELECTED_MODEL]: selectedModel });
         renderModelSelect();
       }
       if (e.target.id === 'nagasai-model-select') {
         selectedModel = e.target.value;
+        chrome.storage.local.set({ [K.SELECTED_MODEL]: selectedModel });
       }
     });
 

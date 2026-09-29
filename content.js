@@ -28,6 +28,8 @@
   const K = {
     CHAT_HISTORY: '_c1',
     PREFERRED_MODE: '_c2',
+    SELECTED_PROVIDER: '_c4',
+    SELECTED_MODEL: '_c5',
   };
 
   // ── Port name (must match background.js) ───────────────────────
@@ -239,11 +241,15 @@
   // Bug #1 Fix: Do NOT auto-open the panel on page load.
   // PREFERRED_MODE is only used to remember WHICH mode to use when the
   // user clicks the 'S' button — NOT to auto-open it on navigation.
-  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE], (data) => {
+  chrome.storage.local.get([K.CHAT_HISTORY, K.PREFERRED_MODE, K.SELECTED_PROVIDER, K.SELECTED_MODEL], (data) => {
+    if (data[K.SELECTED_PROVIDER]) selectedProvider = data[K.SELECTED_PROVIDER];
+    if (data[K.SELECTED_MODEL]) selectedModel = data[K.SELECTED_MODEL];
     if (data[K.CHAT_HISTORY]) {
       chatHistory = data[K.CHAT_HISTORY];
       if (currentView === 'chat') renderMessages();
     }
+    renderProviderSelect();
+    renderModelSelect();
     // Panel always starts closed on page load — user must click to open.
   });
 
@@ -251,6 +257,14 @@
 
   (async () => {
     await refreshAuthState();
+    
+    // Restore selected provider and model after keys are loaded
+    chrome.storage.local.get([K.SELECTED_PROVIDER, K.SELECTED_MODEL], (data) => {
+      if (data[K.SELECTED_PROVIDER]) selectedProvider = data[K.SELECTED_PROVIDER];
+      if (data[K.SELECTED_MODEL]) selectedModel = data[K.SELECTED_MODEL];
+      renderProviderSelect();
+    });
+
     setupEventListeners();
     const st = await sendMsg({ type: T.GET_SIDEPANEL_STATE });
     if (st && st.isOpen) {
@@ -579,9 +593,13 @@
       if (e.target.id === 'nagasai-provider-select') {
         selectedProvider = e.target.value;
         selectedModel = PROVIDERS[selectedProvider].models[0][0];
+        chrome.storage.local.set({ [K.SELECTED_PROVIDER]: selectedProvider, [K.SELECTED_MODEL]: selectedModel });
         renderModelSelect();
       }
-      if (e.target.id === 'nagasai-model-select') selectedModel = e.target.value;
+      if (e.target.id === 'nagasai-model-select') {
+        selectedModel = e.target.value;
+        chrome.storage.local.set({ [K.SELECTED_MODEL]: selectedModel });
+      }
     });
 
     panel.addEventListener('keydown', (e) => {

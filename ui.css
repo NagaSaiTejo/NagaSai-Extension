@@ -1208,10 +1208,3 @@
 }
 
 /* ─── sidepanel.html overrides ───────────────────────────────── */
-#nagasai-close {
-  display: none !important;
-}
-
-#nagasai-sidepanel-btn {
-  display: none !important;
-}
